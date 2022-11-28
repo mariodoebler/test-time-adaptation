@@ -1,0 +1,24 @@
+MODEL:
+  ADAPTATION: "asm"
+TEST:
+  BATCH_SIZE: 1
+  IMG_SIZE: 1024
+OPTIM:
+  METHOD: "SGD"
+  LR: 2.5e-4
+  WD: 0.0005
+  STEPS: 4
+SOURCE:
+  PERCENTAGE: 1.0
+  RANDOM_SCALE_CROP: True
+  PROB_FLIP: 0.5
+  PROB_BLUR: 0.0
+  PROB_JITTER: 0.0
+  MIN_SCALE: 0.75
+  MAX_SCALE: 2.0
+  BASE_SIZE: 512
+  CROP_SIZE: [1024, 512]
+  BATCH_SIZE: 1   # due to large memory consumption
+LIST_NAME_SRC: "clear_train.txt"
+LIST_NAME_TEST: "day_night_1200.txt"
+EXP_NAME: ""

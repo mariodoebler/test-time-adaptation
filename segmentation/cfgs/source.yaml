@@ -1,0 +1,8 @@
+MODEL:
+  ADAPTATION: "source"
+TEST:
+  BATCH_SIZE: 1
+  IMG_SIZE: 1024
+LIST_NAME_TEST: "day_night_1200.txt"
+CKPT_PATH_SEG: "./ckpt/clear/ckpt_seg.pth"
+EXP_NAME: ""

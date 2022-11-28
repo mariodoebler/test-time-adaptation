@@ -1,0 +1,11 @@
+CORRUPTION:
+  DATASET: imagenet_r
+  SEVERITY:
+    - 5
+  TYPE:
+    - imagenet_r
+MODEL:
+  ADAPTATION: norm_alpha
+  ARCH: resnet50
+TEST:
+  BATCH_SIZE: 1

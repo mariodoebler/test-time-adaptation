@@ -1,0 +1,130 @@
+import torch
+import torch.nn as nn
+from torch.nn.utils.weight_norm import WeightNorm
+
+from copy import deepcopy
+from models.model import ResNetDomainNet126
+
+
+class TTAMethod(nn.Module):
+    """
+    """
+    def __init__(self, model, optimizer, steps=1, episodic=False, window_length=32):
+        super().__init__()
+        self.model = model
+        self.optimizer = optimizer
+        self.steps = steps
+        assert steps > 0, "requires >= 1 step(s) to forward and update"
+        self.episodic = episodic
+
+        # variables needed for single sample test-time adaptation using a sliding window approach
+        self.input_buffer = None
+        self.window_length = window_length
+        self.pointer = torch.tensor([0], dtype=torch.long).cuda()
+
+        # note: if the self.model is never reset, like for continual adaptation,
+        # then skipping the state copy would save memory
+        self.models = [self.model]
+        self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
+
+    def forward(self, x):
+        if self.episodic:
+            self.reset()
+
+        x = x if isinstance(x, list) else [x]
+
+        if x[0].shape[0] == 1:  # single sample test-time adaptation
+            # create the sliding window input
+            if self.input_buffer is None:
+                self.input_buffer = [x_item for x_item in x]
+            elif self.input_buffer[0].shape[0] < self.window_length:
+                self.input_buffer = [torch.cat([self.input_buffer[i], x_item], dim=0) for i, x_item in enumerate(x)]
+            else:
+                for i, x_item in enumerate(x):
+                    self.input_buffer[i][self.pointer] = x[i]
+
+            if self.pointer == (self.window_length - 1):
+                # update the model, since the complete buffer has changed
+                for _ in range(self.steps):
+                    outputs = self.forward_and_adapt(self.input_buffer)
+            else:
+                # create the prediction without updating the model
+                outputs = self.forward_sliding_window(self.input_buffer)
+
+            # get only the current prediction and increase the pointer
+            outputs = outputs[self.pointer.long()]
+            self.pointer += 1
+            self.pointer %= self.window_length
+
+        else:   # common batch adaptation setting
+            for _ in range(self.steps):
+                outputs = self.forward_and_adapt(x)
+
+        return outputs
+
+    @torch.enable_grad()  # ensure grads in possible no grad context for testing
+    def forward_and_adapt(self, x):
+        """Forward and adapt model on batch of data.
+        """
+        raise NotImplementedError
+
+    @torch.no_grad()
+    def forward_sliding_window(self, x):
+        """
+        Create the prediction for single sample test-time adaptation with a sliding window
+        :param x: The buffered data created with a sliding window
+        :return: Model predictions
+        """
+        imgs_test = x[0]
+        return self.model(imgs_test)
+
+    def reset(self):
+        if self.model_states is None or self.optimizer_state is None:
+            raise Exception("cannot reset without saved self.model/optimizer state")
+        self.load_model_and_optimizer()
+
+    def copy_model_and_optimizer(self):
+        """Copy the model and optimizer states for resetting after adaptation."""
+        model_states = [deepcopy(model.state_dict()) for model in self.models]
+        optimizer_state = deepcopy(self.optimizer.state_dict())
+        return model_states, optimizer_state
+
+    def load_model_and_optimizer(self):
+        """Restore the model and optimizer states from copies."""
+        for model, model_state in zip(self.models, self.model_states):
+            model.load_state_dict(model_state, strict=True)
+        self.optimizer.load_state_dict(self.optimizer_state)
+
+    @staticmethod
+    def copy_model(model):
+        if isinstance(model, ResNetDomainNet126):  # https://github.com/pytorch/pytorch/issues/28594
+            for module in model.modules():
+                for _, hook in module._forward_pre_hooks.items():
+                    if isinstance(hook, WeightNorm):
+                        delattr(module, hook.name)
+            coppied_model = deepcopy(model)
+            for module in model.modules():
+                for _, hook in module._forward_pre_hooks.items():
+                    if isinstance(hook, WeightNorm):
+                        hook(module, None)
+        else:
+            coppied_model = deepcopy(model)
+        return coppied_model
+
+    @staticmethod
+    def collect_params(model):
+        """Collect all trainable parameters.
+
+        Walk the model's modules and collect all parameters.
+        Return the parameters and their names.
+
+        Note: other choices of parameterization are possible!
+        """
+        params = []
+        names = []
+        for nm, m in model.named_modules():
+            for np, p in m.named_parameters():
+                if np in ['weight', 'bias'] and p.requires_grad:
+                    params.append(p)
+                    names.append(f"{nm}.{np}")
+        return params, names

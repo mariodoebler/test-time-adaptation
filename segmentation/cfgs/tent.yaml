@@ -1,0 +1,13 @@
+MODEL:
+  ADAPTATION: "tent"
+  EPISODIC: True
+TEST:
+  BATCH_SIZE: 1
+  IMG_SIZE: 1024
+OPTIM:
+  METHOD: "SGD"
+  LR: 2.5e-4
+  WD: 0.0005
+  STEPS: 1
+LIST_NAME_TEST: "day_night_1200.txt"
+EXP_NAME: ""

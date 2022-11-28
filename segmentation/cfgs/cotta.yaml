@@ -1,0 +1,17 @@
+MODEL:
+  ADAPTATION: "cotta"
+TEST:
+  BATCH_SIZE: 1
+  IMG_SIZE: 1024
+OPTIM:
+  METHOD: "SGD"
+  LR: 2.5e-4
+  WD: 0.0005
+  STEPS: 1
+COTTA:
+  RST: 0.01
+  AP: 0.9
+M_TEACHER:
+  MOMENTUM: 0.999
+LIST_NAME_TEST: "day_night_1200.txt"
+EXP_NAME: ""

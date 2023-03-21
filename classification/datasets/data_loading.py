@@ -7,10 +7,12 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 
-from conf import complete_data_dir_path, get_domain_sequence
+from conf import complete_data_dir_path
 from datasets.imagelist_dataset import ImageList
-from datasets.imagenet200_dataset import create_imagenet200_dataset
+from datasets.imagenet_subsets import create_imagenet_subset, class_mapping_164_to_109
 from datasets.corruptions_datasets import create_cifarc_dataset, create_imagenetc_dataset
+from datasets.imagenet_d_utils import create_symlinks_and_get_imagenet_visda_mapping
+from datasets.imagenet_dict import map_dict
 from augmentations.transforms_adacontrast import get_augmentation_versions, get_augmentation
 
 
@@ -30,7 +32,7 @@ def get_transform(dataset_name, adaptation):
         if dataset_name in {"cifar10", "cifar100", "cifar10_c", "cifar100_c"}:
             transform = get_augmentation_versions(aug_versions="twss", aug_type="moco-v2-light", res_size=32, crop_size=32)
         elif dataset_name == "imagenet_c":
-            # note that ImageNet-C is already resized an centre cropped
+            # note that ImageNet-C is already resized and centre cropped
             transform = get_augmentation_versions(aug_versions="twss", aug_type="moco-v2-light", res_size=224, crop_size=224)
         elif dataset_name in {"domainnet126"}:
             transform = get_augmentation_versions(aug_versions="twss", aug_type="moco-v2", res_size=256, crop_size=224)
@@ -57,7 +59,7 @@ def get_transform(dataset_name, adaptation):
     return transform
 
 
-def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, severity, num_examples, ckpt_path=None, batch_size=128, shuffle=False, workers=4):
+def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, severity, num_examples, domain_names_all, batch_size=128, shuffle=False, workers=4):
     # Fix seed again to ensure that the test sequence is the same for all methods
     random.seed(1)
     data_dir = complete_data_dir_path(root=root_dir, dataset_name=dataset_name)
@@ -69,25 +71,34 @@ def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, se
     else:
         if dataset_name in {"cifar10_c", "cifar100_c"}:
             test_dataset = create_cifarc_dataset(dataset_name=dataset_name,
-                                                 n_examples=num_examples,
                                                  severity=severity,
                                                  data_dir=data_dir,
-                                                 corruptions=[domain_name],
+                                                 corruption=domain_name,
+                                                 corruptions_seq=domain_names_all,
                                                  transform=transform,
                                                  setting=setting)
         elif dataset_name == "imagenet_c":
             test_dataset = create_imagenetc_dataset(n_examples=num_examples,
                                                     severity=severity,
                                                     data_dir=data_dir,
-                                                    corruptions=[domain_name],
+                                                    corruption=domain_name,
+                                                    corruptions_seq=domain_names_all,
                                                     transform=transform,
                                                     setting=setting)
-        elif dataset_name in {"imagenet_r", "imagenet_a"}:
+        elif dataset_name in {"imagenet_k", "imagenet_r", "imagenet_a"}:
             test_dataset = torchvision.datasets.ImageFolder(root=data_dir, transform=transform)
-        elif dataset_name in {"domainnet126"}:
-            if "non_stationary" in setting:
-                domain_seq = get_domain_sequence(ckpt_path)
-                data_files = [os.path.join("datasets", f"{dataset_name}_lists", dom + "_list.txt") for dom in domain_seq]
+        elif dataset_name in {"imagenet_d", "imagenet_d109", "domainnet126", "office31", "visda"}:
+            # create the symlinks needed for imagenet-d variants
+            if dataset_name in {"imagenet_d", "imagenet_d109"}:
+                for dom_name in domain_names_all:
+                    if not os.path.exists(os.path.join(data_dir, dom_name)):
+                        logger.info(f"Creating symbolical links for ImageNet-D {dom_name}...")
+                        domainnet_dir = os.path.join(complete_data_dir_path(root=root_dir, dataset_name="domainnet126"), dom_name)
+                        create_symlinks_and_get_imagenet_visda_mapping(domainnet_dir, map_dict)
+
+            # prepare a list containing all paths of the image-label-files
+            if "mixed_domains" in setting:
+                data_files = [os.path.join("datasets", f"{dataset_name}_lists", dom_name + "_list.txt") for dom_name in domain_names_all]
             else:
                 data_files = [os.path.join("datasets", f"{dataset_name}_lists", domain_name + "_list.txt")]
 
@@ -97,27 +108,42 @@ def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, se
         else:
             raise ValueError(f"Dataset '{dataset_name}' is not supported!")
 
-    if "correlated" in setting:
-        if hasattr(test_dataset, 'samples'):
-            # sort the file paths by label
-            test_dataset.samples.sort(key=lambda x: x[1])
-        else:
-            raise ValueError(f"The setting '{setting}' is not supported for: {dataset_name} {domain_name}")
-    elif dataset_name in {"imagenet_r"} or domain_name == "none":
-        # shuffle the data since it is sorted by class
-        if hasattr(test_dataset, 'samples'):
+    try:
+        # randomly subsample the dataset if num_examples is specified
+        if num_examples != -1:
+            num_samples_orig = len(test_dataset)
+            # logger.info(f"Changing the number of test samples from {num_samples_orig} to {num_examples}...")
+            test_dataset.samples = random.sample(test_dataset.samples, k=min(num_examples, num_samples_orig))
+
+        # prepare samples with respect to the considered setting
+        if "mixed_domains" in setting:
+            logger.info(f"Mixing the file paths of the following domains: {domain_names_all}")
             random.shuffle(test_dataset.samples)
+
+        if "correlated" in setting:
+            # sort the file paths by label
+            logger.info(f"Sorting the file paths by class labels...")
+            test_dataset.samples.sort(key=lambda x: x[1])
+        elif dataset_name in {"imagenet_k", "imagenet_r", "imagenet_a", "imagenet_d", "imagenet_d109", "office31", "visda"} or domain_name == "none":
+            # shuffle the data since it is sorted by class
+            random.shuffle(test_dataset.samples)
+    except AttributeError:
+        logger.warning("Attribute 'samples' is missing. Continuing without shuffling, sorting or subsampling the files...")
 
     return torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=workers, drop_last=False)
 
 
 def get_source_loader(dataset_name, root_dir, adaptation, batch_size, train_split=True, ckpt_path=None, num_samples=None, percentage=1.0, workers=4):
-    # setup the transformation pipeline
-    dataset_name = dataset_name[:-2] if dataset_name in {"cifar10_c", "cifar100_c", "imagenet_c"} else dataset_name
+    # create the name of the corresponding source dataset
+    dataset_name = dataset_name.split("_")[0] if dataset_name in {"cifar10_c", "cifar100_c", "imagenet_c", "imagenet_k"} else dataset_name
+
+    # complete the root path to the full dataset path
     data_dir = complete_data_dir_path(root=root_dir, dataset_name=dataset_name)
+
+    # setup the transformation pipeline
     transform = get_transform(dataset_name, adaptation)
 
-    # create source dataset
+    # create the source dataset
     if dataset_name == "cifar10":
         source_dataset = torchvision.datasets.CIFAR10(root=root_dir,
                                                       train=train_split,
@@ -133,20 +159,20 @@ def get_source_loader(dataset_name, root_dir, adaptation, batch_size, train_spli
         source_dataset = torchvision.datasets.ImageNet(root=data_dir,
                                                        split=split,
                                                        transform=transform)
-    elif dataset_name in {"domainnet126"}:
+    elif dataset_name in {"domainnet126", "office31", "visda"}:
         src_domain = ckpt_path.replace('.pth', '').split(os.sep)[-1].split('_')[1]
         source_data_list = [os.path.join("datasets", f"{dataset_name}_lists", f"{src_domain}_list.txt")]
         source_dataset = ImageList(image_root=data_dir,
                                    label_files=source_data_list,
                                    transform=transform)
         logger.info(f"Loading source data from list: {source_data_list[0]}")
-    elif dataset_name == "imagenet_r":
+    elif dataset_name in {"imagenet_r", "imagenet_a", "imagenet_d", "imagenet_d109"}:
         split = "train" if train_split else "val"
         data_dir = complete_data_dir_path(root=root_dir, dataset_name="imagenet")
-        source_dataset = create_imagenet200_dataset(data_dir=data_dir,
-                                                    dataset_name=dataset_name,
-                                                    split=split,
-                                                    transform=transform)
+        source_dataset = create_imagenet_subset(data_dir=data_dir,
+                                                dataset_name=dataset_name,
+                                                split=split,
+                                                transform=transform)
     else:
         raise ValueError("Dataset not supported.")
 
@@ -171,5 +197,5 @@ def get_source_loader(dataset_name, root_dir, adaptation, batch_size, train_spli
                                                 shuffle=True,
                                                 num_workers=workers,
                                                 drop_last=False)
-    logger.info(f"Number of source batches in source loader: {len(source_loader)}")
+    logger.info(f"Number of images and batches in source loader: #img = {len(source_dataset)} #batches = {len(source_loader)}")
     return source_dataset, source_loader

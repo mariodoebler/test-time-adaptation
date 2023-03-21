@@ -1,22 +1,6 @@
 # Online Test-time Adaptation
-This is an open source online test-time adaptation repository based on PyTorch. It is joint work by Robert A. Marsden and Mario Döbler. It is also the official repository for the work [Introducing Intermediate Domains for Effective Self-Training during Test-Time](https://arxiv.org/abs/2208.07736) and [Robust Mean Teacher for Continual and Gradual Test-Time Adaptation](https://arxiv.org/abs/2211.13081).
+This is an open source online test-time adaptation repository based on PyTorch. It is joint work by Robert A. Marsden and Mario Döbler. It is also the official repository for the work [Introducing Intermediate Domains for Effective Self-Training during Test-Time](https://arxiv.org/abs/2208.07736) and [Robust Mean Teacher for Continual and Gradual Test-Time Adaptation](https://arxiv.org/abs/2211.13081) (CVPR2023).
 
-<details open>
-<summary>Features</summary>
-
-- **Unified Benchmark**
-
-  We provide a unified benchmark for online test-time adaptation (TTA). For single-target TTA and continual TTA, we provide: CIFAR10-to-CIFAR10C, CIFAR100-to-CIFAR100C, ImageNet-to-ImageNet-C, ImageNet-to-ImageNet-R, and DomainNet126. For the setting of gradual TTA, we provide: CIFAR10-to-CIFAR10C, CIFAR100-to-CIFAR100C, ImageNet-to-ImageNet-C and CarlaTTA (segmentation).
-
-- **Modular Design**
-
-  Adding new methods should be rather simple, thanks to the modular design.
-
-- **Support of multiple methods out of box**
-
-  The repository currently supports the following methods: BN-0 (source), BN-alpha, BN-1, TENT, CoTTA, AdaContrast, GTTA, and RMT.
-
-</details>
 
 ## Prerequisites
 To use the repository, we provide a conda environment.
@@ -28,61 +12,108 @@ conda activate tta
 
 ## Classification
 
+<details open>
+<summary>Features</summary>
+
+This repository allows to study a wide range of different datasets, models, settings, and methods. A quick overview is given below:
+
+- **Datasets**
+  - `cifar10_c` [CIFAR10-C](https://zenodo.org/record/2535967#.ZBiI7NDMKUk)
+  - `cifar100_c` [CIFAR100-C](https://zenodo.org/record/3555552#.ZBiJA9DMKUk)
+  - `imagenet_c` [ImageNet-C](https://zenodo.org/record/2235448#.Yj2RO_co_mF)
+  - `imagenet_a` [ImageNet-A](https://github.com/hendrycks/natural-adv-examples)
+  - `imagenet_r` [ImageNet-R](https://github.com/hendrycks/imagenet-r)
+  - `imagenet_k` [ImageNet-Sketch](https://github.com/HaohanWang/ImageNet-Sketch)
+  - `imagenet_d` [ImageNet-D](https://github.com/bethgelab/robustness/tree/main/examples/imagenet_d)
+  - `imagenet_d109`
+  - `domainnet126` [DomainNet (cleaned)](http://ai.bu.edu/M3SDA/)
+
+- **Models**
+  - For adapting to ImageNet variations, all pre-trained models available in [Torchvision](https://pytorch.org/vision/0.14/models.html) can be used.
+  - For the corruption benchmarks, pre-trained models from [RobustBench](https://github.com/RobustBench/robustbench) can be used.
+  - For the DomainNet-126 benchmark, there is a pre-trained model for each domain.
+  - Further models include [ResNet-26 GN](https://github.com/zhangmarvin/memo), [ResNet-50 GN](https://github.com/ppwwyyxx/GroupNorm-reproduce/tree/master/ImageNet-ResNet-PyTorch),
+  and [BiT](https://github.com/google-research/big_transfer).
+
+- **Settings**
+  - `reset_each_shift` Reset the model state after the adaptation to a domain.
+  - `continual` Train the model on a sequence of domains without knowing when a domain shift occurs.
+  - `gradual` Train the model on a sequence of gradually increasing/decreasing domain shifts without knowing when a domain shift occurs.
+  - `non_stationary` Train the model on one long test sequence where consecutive test samples are likely to originate from different domains.
+  - `correlated` Same as the continual setting but the samples of each domain are further sorted by class label.
+  - `non_stationary_correlated` Mixed domains and sorted by class label.
+  - Combinations like `gradual_correlated` or `reset_each_shift_correlated` are also possible.
+
+- **Methods**
+  - The repository currently supports the following methods: BN-0 (source), BN-alpha, BN-1, [TENT](https://openreview.net/pdf?id=uXl3bZLkr3c),
+  [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
+  [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
+  [GTTA](https://arxiv.org/abs/2208.07736), and [RMT](https://arxiv.org/abs/2211.13081).
+
+
+- **Modular Design**
+  - Adding new methods should be rather simple, thanks to the modular design.
+
+</details>
+
+### Get Started
+To run one of the following benchmarks, the corresponding datasets need to be downloaded.
+- *CIFAR10-to-CIFAR10-C*: the data is automatically downloaded.
+- *CIFAR100-to-CIFAR100-C*: the data is automatically downloaded.
+- *ImageNet-to-ImageNet-C*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-C](https://zenodo.org/record/2235448#.Yj2RO_co_mF).
+- *ImageNet-to-ImageNet-A*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-A](https://github.com/hendrycks/natural-adv-examples).
+- *ImageNet-to-ImageNet-R*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-R](https://github.com/hendrycks/imagenet-r).
+- *ImageNet-to-ImageNet-Sketch*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-Sketch](https://github.com/HaohanWang/ImageNet-Sketch).
+- *ImageNet-to-ImageNet-D*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php). For [ImageNet-D](https://openreview.net/pdf?id=LiC2vmzbpMO), see the download instructions for DomainNet-126 below. ImageNet-D is created by symlinks, which are set up at the first use.
+- *ImageNet-to-ImageNet-D109*: see instructions for DomainNet-126 below.
+- *DomainNet-126*: download the 6 splits of the [cleaned version](http://ai.bu.edu/M3SDA/). Following [MME](https://arxiv.org/abs/1904.06487), DomainNet-126 only uses a subset that contains 126 classes from 4 domains.
+
+Next, specify the root folder for all datasets `_C.DATA_DIR = "./data"` in the file `conf.py`. For the individual datasets, the directory names are specified in `conf.py` as a dictionary (see function `complete_data_dir_path`). In case your directory names deviate from the ones specified in the mapping dictionary, you can simply modify them.
+
+
+### Run Experiments
+
 We provide config files for all experiments and methods. Simply run the following Python file with the corresponding config file.
 ```bash
-python test_time.py --cfg cfgs/[continual/gradual]/[cifar10_c/cifar100_c/imagenet_c/imagenet_r/domainnet126]/[source/norm_test/norm_alpha/tent/cotta/gtta/adacontrast/rmt].yaml
+python test_time.py --cfg cfgs/[cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/eta/eata/cotta/adacontrast/lame/gtta/rmt].yaml
 ```
 
-E.g., to run RMT for the continual CIFAR100-to-CIFAR100C task using 1 update step, run the following command.
+For imagenet_others, the argument CORRUPTION.DATASET has to be passed:
 ```bash
-python test_time.py --cfg cfgs/continual/cifar100_c/rmt.yaml OPTIM.STEP 1
+python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/eta/eata/cotta/adacontrast/lame/gtta/rmt].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_d109]
 ```
 
-### Settings
-The default setting is continual test-time adaptation. If you want to evaluate each domain shift separately, namely single-target test-time adaptation, the following argument has to be passed.
+E.g., to run RMT for the ImageNet-to-ImageNet-R benchmark, run the following command.
 ```bash
-python test_time.py --cfg cfgs/continual/[dataset]/[method].yaml SETTING reset_each_shift
+python test_time.py --cfg cfgs/imagenet_others/rmt.yaml CORRUPTION.DATASET imagenet_r
 ```
 
-### Datasets
-The root folder for the datasets can be specified by `_C.DATA_DIR = "./data"` in `conf.py`. For the individual datasets, the directory names are specified in `conf.py` as a dictionary. In case your directory names deviate from the ones specified in the mapping dictionary, you can simply modify them. Some datasets have to be manually downloaded, for more information please read the following.
-
-#### ImageNet-to-ImageNet-C
-For the continual and gradual ImageNet-to-ImageNet-C benchmark, it is required to first download ImageNet and ImageNet-C.
-+ ImageNet [download](https://www.image-net.org/download.php)
-+ ImageNet-C [download](https://zenodo.org/record/2235448#.Yj2RO_co_mF)
-
-For GTTA, we provide checkpoint files for the style transfer network. The checkpoints are provided on Google-Drive ([download](https://drive.google.com/file/d/1i1IUZ6XJYBa7TfNVM4LovsP3gBCutm9_/view?usp=sharing)); extract the zip-file within the `classification` subdirectory.
-
-#### ImageNet-to-ImageNet-R
-For the ImageNet-to-ImageNet-R benchmark, it is required to first download ImageNet and ImageNet-R.
-+ ImageNet [download](https://www.image-net.org/download.php)
-+ ImageNet-R [download](https://github.com/hendrycks/imagenet-r)
-
-#### DomainNet126
-For the continual DomainNet126 benchmark, it is required to first download DomainNet126. We follow AdaContrast and use a subset that contains 126 classes from 4 domains.
-+ DomainNet (cleaned) [download](http://ai.bu.edu/M3SDA/)
-
-For the different sequences you have to pass the `CKPT_PATH` argument. When not specifying a `CKPT_PATH`, the sequence using the real domain as the source domain will be used.
-```
-python test_time.py --cfg cfgs/continual/[dataset]/[method].yaml CKPT_PATH [./ckpt/domainnet126/best_real_2020.pth ./ckpt/domainnet126/best_clipart_2020.pth ./ckpt/domainnet126/best_painting_2020.pth ./ckpt/domainnet126/best_sketch_2020.pth]
+To run the different continual DomainNet-126 sequences, you have to pass the `CKPT_PATH` argument. When not specifying a `CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
+The checkpoints are provided by [AdaContrast](https://github.com/DianCh/AdaContrast) and can be downloaded [here](https://drive.google.com/drive/folders/1OOSzrl6kzxIlEhNAK168dPXJcHwJ1A2X). Structurally, it is best to download them into the directory `./ckpt/domainnet126`.
+```bash
+python test_time.py --cfg cfgs/domainnet126/rmt.yaml CKPT_PATH ./ckpt/domainnet126/best_clipart_2020.pth
 ```
 
-For more information about the DomainNet126 benchmark, please have a look at our paper [Robust Mean Teacher for Continual and Gradual Test-Time Adaptation](https://arxiv.org/abs/2211.13081). If you find the benchmark useful, feel free to cite our work.
+For GTTA, we provide checkpoint files for the style transfer network. The checkpoints are provided on Google-Drive ([download](https://drive.google.com/file/d/1IpkUwyw8i9HEEjjD6pbbe_MCxM7yqKBq/view?usp=sharing)); extract the zip-file within the `classification` subdirectory.
+
+
+### Changing Configurations
+Changing the evaluation configuration is extremely easy. For example, to run TENT on ImageNet-to-ImageNet-C in the `reset_each_shift` setting with a ResNet-50 and the `IMAGENET1K_V1` initialization, the arguments below have to be passed. 
+Further models and initializations can be found [here](https://pytorch.org/vision/0.14/models.html).
+```bash
+python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WEIGHTS IMAGENET1K_V1 SETTING reset_each_shift
 ```
-@article{dobler2022robust,
-  title={Robust Mean Teacher for Continual and Gradual Test-Time Adaptation},
-  author={D{\"o}bler, Mario and Marsden, Robert A and Yang, Bin},
-  journal={arXiv preprint arXiv:2211.13081},
-  year={2022}
-}
-```
+
 
 ### Acknowledgements
++ Robustbench [official](https://github.com/RobustBench/robustbench)
 + CoTTA [official](https://github.com/qinenergy/cotta)
 + TENT [official](https://github.com/DequanWang/tent)
-+ Robustbench [official](https://github.com/RobustBench/robustbench)
 + AdaContrast [official](https://github.com/DianCh/AdaContrast)
++ EATA [official](https://github.com/mr-eggplant/EATA)
++ LAME [official](https://github.com/fiveai/LAME)
++ MEMO [official](https://github.com/zhangmarvin/memo)
+
 
 ## Segmentation
 

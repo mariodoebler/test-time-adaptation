@@ -1,4 +1,3 @@
-
 import os
 import logging
 
@@ -14,8 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 class GTTA(TTAMethod):
-    """GTTA
-    """
     def __init__(self, model, optimizer, steps, episodic, window_length, dataset_name, num_classes, src_loader,
                  ckpt_dir, ckpt_path, steps_adain, pretrain_steps_adain, style_transfer, lam_mixup):
         super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
@@ -65,27 +62,33 @@ class GTTA(TTAMethod):
 
                 # Train adain model
                 for _ in range(self.steps_adain):
+                    # sample source batch
                     try:
-                        imgs_src, _ = next(self.src_loader_iter)
+                        batch = next(self.src_loader_iter)
                     except StopIteration:
                         self.src_loader_iter = iter(self.src_loader)
-                        imgs_src, _ = next(self.src_loader_iter)
+                        batch = next(self.src_loader_iter)
+
+                    # train on source data
+                    imgs_src = batch[0].cuda()
 
                     self.adain_model.opt_adain_dec.zero_grad()
-                    _, loss_content, loss_style = self.adain_model(imgs_src.cuda(), moments_list=self.moments_list)
+                    _, loss_content, loss_style = self.adain_model(imgs_src, moments_list=self.moments_list)
                     loss_adain = 1.0 * loss_content + 0.1 * loss_style
                     loss_adain.backward()
                     self.adain_model.opt_adain_dec.step()
 
         # Train classification model
         with torch.no_grad():
+            # sample source batch
             try:
-                imgs_src, labels_src = next(self.src_loader_iter)
+                batch = next(self.src_loader_iter)
             except StopIteration:
                 self.src_loader_iter = iter(self.src_loader)
-                imgs_src, labels_src = next(self.src_loader_iter)
+                batch = next(self.src_loader_iter)
 
-            imgs_src, labels_src = imgs_src.cuda(), labels_src.cuda().long()
+            # train on labeled source data
+            imgs_src, labels_src = batch[0].cuda(), batch[1].cuda().long()
 
             if self.use_style_transfer:
                 # Generate style transferred images from source images
@@ -113,7 +116,7 @@ class GTTA(TTAMethod):
         self.counter += 1
         self.counter %= self.steps
         return outputs_test
-    
+
     @torch.no_grad()
     def mixup_data(self, x_source, x_target, lam=0.25):
         mixed_x = lam * x_target + (1 - lam) * x_source

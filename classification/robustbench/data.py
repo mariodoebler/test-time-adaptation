@@ -120,36 +120,36 @@ CORRUPTIONS_DIR_NAMES: Dict[BenchmarkDataset, str] = {
 
 
 def load_cifar10c(
-    n_examples: int,
-    severity: int = 5,
-    data_dir: str = './data',
-    shuffle: bool = False,
-    corruptions: Sequence[str] = CORRUPTIONS,
-    prepr: Optional[str] = 'none'
+        n_examples: int = 10000,
+        severity: int = 5,
+        data_dir: str = './data',
+        shuffle: bool = False,
+        corruptions: Sequence[str] = CORRUPTIONS,
+        prepr: Optional[str] = 'none'
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     return load_corruptions_cifar(BenchmarkDataset.cifar_10, n_examples,
                                   severity, data_dir, corruptions, shuffle)
 
 
 def load_cifar100c(
-    n_examples: int,
-    severity: int = 5,
-    data_dir: str = './data',
-    shuffle: bool = False,
-    corruptions: Sequence[str] = CORRUPTIONS,
-    prepr: Optional[str] = 'none'
+        n_examples: int = 10000,
+        severity: int = 5,
+        data_dir: str = './data',
+        shuffle: bool = False,
+        corruptions: Sequence[str] = CORRUPTIONS,
+        prepr: Optional[str] = 'none'
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     return load_corruptions_cifar(BenchmarkDataset.cifar_100, n_examples,
                                   severity, data_dir, corruptions, shuffle)
 
 
 def load_imagenetc(
-    n_examples: Optional[int] = 5000,
-    severity: int = 5,
-    data_dir: str = './data',
-    shuffle: bool = False,
-    corruptions: Sequence[str] = CORRUPTIONS,
-    prepr: str = 'Res256Crop224'
+        n_examples: Optional[int] = 5000,
+        severity: int = 5,
+        data_dir: str = './data',
+        shuffle: bool = False,
+        corruptions: Sequence[str] = CORRUPTIONS,
+        prepr: str = 'Res256Crop224'
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     transforms_test = PREPROCESSINGS[prepr]
 
@@ -180,9 +180,9 @@ CORRUPTION_DATASET_LOADERS: Dict[BenchmarkDataset, CorruptDatasetLoader] = {
 
 def load_corruptions_cifar(
         dataset: BenchmarkDataset,
-        n_examples: int,
-        severity: int,
-        data_dir: str,
+        n_examples: int = 10000,
+        severity: int = 5,
+        data_dir: str = './data',
         corruptions: Sequence[str] = CORRUPTIONS,
         shuffle: bool = False) -> Tuple[torch.Tensor, torch.Tensor]:
     assert 1 <= severity <= 5

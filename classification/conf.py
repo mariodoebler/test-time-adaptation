@@ -61,8 +61,11 @@ _C.DESC = ""
 # ----------------------------- Model options ------------------------------- #
 _C.MODEL = CfgNode()
 
-# Check https://github.com/RobustBench/robustbench for available models
+# Check https://github.com/RobustBench/robustbench or https://pytorch.org/vision/0.14/models.html for available models
 _C.MODEL.ARCH = 'Standard'
+
+# Type of pre-trained weights for torchvision models. See: https://pytorch.org/vision/0.14/models.html
+_C.MODEL.WEIGHTS = "IMAGENET1K_V1"
 
 # Inspect the cfgs directory to see all possibilities
 _C.MODEL.ADAPTATION = 'source'
@@ -86,7 +89,7 @@ _C.CORRUPTION.SEVERITY = [5, 4, 3, 2, 1]
 # Number of examples to evaluate (10000 for all samples in CIFAR-C)
 # For ImageNet-C, RobustBench loads a list containing 5000 samples.
 # If num_ex is larger than 5000 all images (50,000) are loaded and then subsampled to num_ex
-_C.CORRUPTION.NUM_EX = 10000
+_C.CORRUPTION.NUM_EX = -1
 
 # ------------------------------- Batch norm options ------------------------ #
 _C.BN = CfgNode()
@@ -101,7 +104,7 @@ _C.OPTIM = CfgNode()
 _C.OPTIM.STEPS = 1
 
 # Learning rate
-_C.OPTIM.LR = 1e-3  # 0.0005 for vit_b_16
+_C.OPTIM.LR = 1e-3
 
 # Choices: Adam, SGD
 _C.OPTIM.METHOD = 'Adam'
@@ -125,7 +128,7 @@ _C.OPTIM.WD = 0.0
 _C.M_TEACHER = CfgNode()
 
 # Mean teacher momentum for EMA update
-_C.M_TEACHER.MOMENTUM = 0.999   # 0.9 for vit_b_16
+_C.M_TEACHER.MOMENTUM = 0.999
 
 # --------------------------------- Contrastive options --------------------- #
 _C.CONTRAST = CfgNode()
@@ -170,23 +173,49 @@ _C.ADACONTRAST = CfgNode()
 _C.ADACONTRAST.QUEUE_SIZE = 16384
 _C.ADACONTRAST.CONTRAST_TYPE = "class_aware"
 _C.ADACONTRAST.CE_TYPE = "standard" # ["standard", "symmetric", "smoothed", "soft"]
-_C.ADACONTRAST.ALPHA = 1.0
-_C.ADACONTRAST.BETA = 1.0
-_C.ADACONTRAST.ETA = 1.0
+_C.ADACONTRAST.ALPHA = 1.0  # lambda for classification loss
+_C.ADACONTRAST.BETA = 1.0   # lambda for instance loss
+_C.ADACONTRAST.ETA = 1.0    # lambda for diversity loss
 
 _C.ADACONTRAST.DIST_TYPE = "cosine" # ["cosine", "euclidean"]
 _C.ADACONTRAST.CE_SUP_TYPE = "weak_strong" # ["weak_all", "weak_weak", "weak_strong", "self_all"]
 _C.ADACONTRAST.REFINE_METHOD = "nearest_neighbors"
 _C.ADACONTRAST.NUM_NEIGHBORS = 10
 
+# --------------------------------- LAME options ----------------------------- #
+_C.LAME = CfgNode()
+
+_C.LAME.AFFINITY = "rbf"
+_C.LAME.KNN = 5
+_C.LAME.SIGMA = 1.0
+_C.LAME.FORCE_SYMMETRY = False
+
+# --------------------------------- EATA options ---------------------------- #
+_C.EATA = CfgNode()
+
+# Fisher alpha
+_C.EATA.FISHER_ALPHA = 2000
+
+# Number of samples for ewc regularization
+_C.EATA.NUM_SAMPLES = 2000
+
+# Diversity margin
+_C.EATA.D_MARGIN = 0.05
+
 # ------------------------------- Source options ---------------------------- #
 _C.SOURCE = CfgNode()
+
+# Number of workers for source data loading
+_C.SOURCE.NUM_WORKERS = 4
 
 # Percentage of source samples used
 _C.SOURCE.PERCENTAGE = 1.0   # [0, 1] possibility to reduce the number of source samples
 
 # ------------------------------- Testing options --------------------------- #
 _C.TEST = CfgNode()
+
+# Number of workers for test data loading
+_C.TEST.NUM_WORKERS = 4
 
 # Batch size for evaluation (and updates for norm + tent)
 _C.TEST.BATCH_SIZE = 128
@@ -259,6 +288,7 @@ def load_cfg_fom_args(description="Config options."):
     log_dest = os.path.basename(args.cfg_file)
     log_dest = log_dest.replace('.yaml', '_{}.txt'.format(current_time))
 
+    cfg.SAVE_DIR = os.path.join(cfg.SAVE_DIR, f"{cfg.MODEL.ADAPTATION}_{cfg.CORRUPTION.DATASET}_{current_time}")
     g_pathmgr.mkdirs(cfg.SAVE_DIR)
     cfg.LOG_TIME, cfg.LOG_DEST = current_time, log_dest
     cfg.freeze()
@@ -324,4 +354,3 @@ def get_domain_sequence(ckpt_path):
                "sketch": ["painting", "clipart", "real"],
                }
     return mapping[domain]
-

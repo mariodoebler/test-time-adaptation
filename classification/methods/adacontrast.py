@@ -210,7 +210,7 @@ class AdaContrast(TTAMethod):
     def forward_sliding_window(self, x):
         """
         :param x: The buffered data created with a sliding window
-        :return: Dummy output
+        :return: Dummy output. Has no effect
         """
         imgs_test = x[0]
         return torch.zeros_like(imgs_test)

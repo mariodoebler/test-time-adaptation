@@ -9,8 +9,8 @@ from robustbench.model_zoo.architectures.utils_architectures import normalize_mo
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 
-from models import resnet26
-from datasets.imagenet200_dataset import IMAGENET_R_MASK
+from models import resnet_bit, resnet26, resnet_gn
+from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_D109_MASK
 
 logger = logging.getLogger(__name__)
 
@@ -194,13 +194,23 @@ class BaseModel(torch.nn.Module):
         return self._output_dim
 
 
-class ImageNetRWrapper(torch.nn.Module):
-    def __init__(self, model):
+class ImageNetXMaskingLayer(torch.nn.Module):
+    """ Following: https://github.com/hendrycks/imagenet-r/blob/master/eval.py
+    """
+    def __init__(self, mask):
+        super().__init__()
+        self.mask = mask
+
+    def forward(self, x):
+        return x[:, self.mask]
+
+
+class ImageNetXWrapper(torch.nn.Module):
+    def __init__(self, model, mask):
         super().__init__()
         self.__dict__ = model.__dict__.copy()
-        # print(model.__dict__)
-        # self.model = model
-        self.masking_layer = ImageNetRMaskingLayer()
+
+        self.masking_layer = ImageNetXMaskingLayer(mask)
 
     def forward(self, x):
         logits = self.model(self.normalize(x))
@@ -229,42 +239,51 @@ class TransformerWrapper(torch.nn.Module):
         return x
 
 
-class ImageNetRMaskingLayer(torch.nn.Module):
-    """ Following: https://github.com/hendrycks/imagenet-r/blob/master/eval.py
-    """
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x):
-        return x[:, IMAGENET_R_MASK]
-
-
 def get_model(cfg, num_classes):
     if cfg.CORRUPTION.DATASET == "domainnet126":
         base_model = ResNetDomainNet126(arch=cfg.MODEL.ARCH, checkpoint_path=cfg.CKPT_PATH, num_classes=num_classes)
     else:
         try:
             # load model from torchvision
-            base_model = get_torchvision_model(cfg.MODEL.ARCH, pretrained=True)
+            base_model = get_torchvision_model(cfg.MODEL.ARCH, weight_version=cfg.MODEL.WEIGHTS)
 
         except ValueError:
             try:
                 # load some custom models
-                if cfg.MODEL.ARCH == "resnet26":
+                if cfg.MODEL.ARCH == "resnet26_gn":
                     base_model = resnet26.build_resnet26()
                     checkpoint = torch.load(cfg.CKPT_PATH, map_location="cpu")
                     base_model.load_state_dict(checkpoint['net'])
                     base_model = normalize_model(base_model, resnet26.MEAN, resnet26.STD)
+                elif cfg.MODEL.ARCH == "resnet50_gn":
+                    base_model = resnet_gn.build_resnet50_gn()
+                    checkpoint = torch.load(cfg.CKPT_PATH, map_location="cpu")
+                    new_params = base_model.state_dict().copy()
+                    for key in checkpoint['state_dict']:
+                        new_params[".".join(key.split(".")[1:])] = checkpoint['state_dict'][key]
+                    base_model.load_state_dict(new_params)
+                    # add input normalization to the model
+                    base_model = normalize_model(base_model, MEAN, STD)
+                elif cfg.MODEL.ARCH in resnet_bit.KNOWN_MODELS.keys():
+                    base_model = resnet_bit.KNOWN_MODELS[cfg.MODEL.ARCH](head_size=1000)#num_classes)   # TODO: fix bug
+                    base_model.load_from(np.load(cfg.CKPT_PATH))
+                    # add input normalization to the model
+                    base_model = normalize_model(base_model, resnet_bit.MEAN, resnet_bit.STD)
                 else:
                     raise ValueError(f"Model {cfg.MODEL.ARCH} is not supported!")
                 logger.info(f"Successfully restored model '{cfg.MODEL.ARCH}' from: {cfg.CKPT_PATH}")
             except ValueError:
                 # load model from robustbench
-                dataset_name = cfg.CORRUPTION.DATASET[:-2] if cfg.CORRUPTION.DATASET in {"imagenet_c", "cifar10_c", "cifar100_c"} else cfg.CORRUPTION.DATASET
+                dataset_name = cfg.CORRUPTION.DATASET.split("_")[0]
                 base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR, dataset_name, ThreatModel.corruptions)
 
-        if cfg.CORRUPTION.DATASET == "imagenet_r":
-            base_model = ImageNetRWrapper(base_model)
+        if cfg.CORRUPTION.DATASET == "imagenet_a":
+            base_model = ImageNetXWrapper(base_model, IMAGENET_A_MASK)
+        elif cfg.CORRUPTION.DATASET == "imagenet_r":
+            base_model = ImageNetXWrapper(base_model, IMAGENET_R_MASK)
+        elif cfg.CORRUPTION.DATASET == "imagenet_d109":
+            base_model = ImageNetXWrapper(base_model, IMAGENET_D109_MASK)
+
     return base_model.cuda()
 
 
@@ -284,28 +303,52 @@ def split_up_model(model, arch_name, dataset_name):
         normalization = ImageNormalizer(mean=model.mu, std=model.sigma)
         encoder = nn.Sequential(normalization, *list(model.children())[:-1], nn.AvgPool2d(kernel_size=8, stride=8), nn.Flatten())
         classifier = model.fc
-    elif arch_name in {"Hendrycks2020AugMix_ResNeXt"}:
+    elif arch_name == "Hendrycks2020AugMix_ResNeXt":
         normalization = ImageNormalizer(mean=model.mu, std=model.sigma)
         encoder = nn.Sequential(normalization, *list(model.children())[:2], nn.ReLU(), *list(model.children())[2:-1], nn.Flatten())
         classifier = model.classifier
-    elif dataset_name in {"imagenet", "imagenet_c"} or arch_name == "resnet26":
-        if arch_name == "vit_b_16":
-            encoder = TransformerWrapper(model)
-            classifier = model.model.heads
-        else:
-            encoder = nn.Sequential(model.normalize, nn.Sequential(*list(model.model.children())[:-1]), nn.Flatten())
-            classifier = model.model.fc
-    elif dataset_name == "imagenet_r":
-        if arch_name == "vit_b_16":
-            encoder = TransformerWrapper(model)
-            classifier = nn.Sequential(model.model.heads.head,  ImageNetRMaskingLayer())
-        else:
-            encoder = nn.Sequential(model.normalize, nn.Sequential(*list(model.model.children())[:-1]), nn.Flatten())
-            classifier = nn.Sequential(model.model.fc, ImageNetRMaskingLayer())
     elif dataset_name == "domainnet126":
         encoder = model.encoder
         classifier = model.fc
+    elif "resnet" in arch_name or "resnext" in arch_name or "wide_resnet" in arch_name or arch_name in {"Standard_R50", "Hendrycks2020AugMix", "Hendrycks2020Many", "Geirhos2018_SIN"}:
+        encoder = nn.Sequential(model.normalize, *list(model.model.children())[:-1], nn.Flatten())
+        classifier = model.model.fc
+    elif "densenet" in arch_name:
+        encoder = nn.Sequential(model.normalize, model.model.features, nn.ReLU(), nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten())
+        classifier = model.model.classifier
+    elif "efficientnet" in arch_name:
+        encoder = nn.Sequential(model.normalize, model.model.features, model.model.avgpool, nn.Flatten())
+        classifier = model.model.classifier
+    elif "mnasnet" in arch_name:
+        encoder = nn.Sequential(model.normalize, model.model.layers, nn.AdaptiveAvgPool2d(output_size=(1, 1)), nn.Flatten())
+        classifier = model.model.classifier
+    elif "shufflenet" in arch_name:
+        encoder = nn.Sequential(model.normalize, *list(model.model.children())[:-1], nn.AdaptiveAvgPool2d(output_size=(1, 1)), nn.Flatten())
+        classifier = model.model.fc
+    elif "vit_" in arch_name and not "maxvit_" in arch_name:
+        encoder = TransformerWrapper(model)
+        classifier = model.model.heads.head
+    elif "swin_" in arch_name:
+        encoder = nn.Sequential(model.normalize, model.model.features, model.model.norm, model.model.permute, model.model.avgpool, model.model.flatten)
+        classifier = model.model.head
+    elif "convnext" in arch_name:
+        encoder = nn.Sequential(model.normalize, model.model.features, model.model.avgpool)
+        classifier = model.model.classifier
+    elif "BiT-" in arch_name:
+        encoder = nn.Sequential(model.normalize, model.model.root, model.model.body)
+        classifier = nn.Sequential(model.model.head, nn.Flatten())
+    elif arch_name == "mobilenet_v2":
+        encoder = nn.Sequential(model.normalize, model.model.features, nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten())
+        classifier = model.model.classifier
     else:
-        raise ValueError(f"Dataset {dataset_name} is not supported.")
+        raise ValueError(f"The model architecture '{arch_name}' is not supported for dataset '{dataset_name}'.")
+
+    # add a masking layer to the classifier
+    if dataset_name == "imagenet_a":
+        classifier = nn.Sequential(classifier, ImageNetXMaskingLayer(IMAGENET_A_MASK))
+    elif dataset_name == "imagenet_r":
+        classifier = nn.Sequential(classifier, ImageNetXMaskingLayer(IMAGENET_R_MASK))
+    elif dataset_name == "imagenet_d109":
+        classifier = nn.Sequential(classifier, ImageNetXMaskingLayer(IMAGENET_D109_MASK))
 
     return encoder, classifier

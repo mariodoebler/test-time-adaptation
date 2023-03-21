@@ -77,3 +77,22 @@ class AlphaBatchNorm(nn.Module):
             0,
             self.layer.eps,
         )
+
+
+class EMABatchNorm(nn.Module):
+    @staticmethod
+    def adapt_model(model):
+        model = EMABatchNorm(model)
+        return model
+
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x):
+        # store statistics, but discard result
+        self.model.train()
+        self.model(x)
+        # store statistics, use the stored stats
+        self.model.eval()
+        return self.model(x)

@@ -328,7 +328,13 @@ def complete_data_dir_path(root, dataset_name):
     mapping = {"imagenet": "imagenet2012",
                "imagenet_c": "ImageNet-C",
                "imagenet_r": "imagenet-r",
-               "domainnet126": "DomainNet-126",
+               "imagenet_k": os.path.join("ImageNet-Sketch", "sketch"),
+               "imagenet_a": "imagenet-a",
+               "imagenet_d": "imagenet-d",  # do not change
+               "imagenet_d109": "imagenet-d",   # do not change
+               "domainnet126": "DomainNet-126", # directory containing the 6 splits of "cleaned versions" from http://ai.bu.edu/M3SDA/#dataset
+               "office31": "office-31",
+               "visda": "visda-2017",
                "cifar10": "",  # do not change the following values
                "cifar10_c": "",
                "cifar100": "",
@@ -339,8 +345,9 @@ def complete_data_dir_path(root, dataset_name):
 
 def get_num_classes(dataset_name):
     dataset_name2num_classes = {"cifar10": 10, "cifar10_c": 10, "cifar100": 100,  "cifar100_c": 100,
-                                "imagenet": 1000, "imagenet_c": 1000, "imagenet_r": 200, "imagenet200": 200,
-                                "domainnet126": 126,
+                                "imagenet": 1000, "imagenet_c": 1000, "imagenet_k": 1000, "imagenet_r": 200,
+                                "imagenet_a": 200, "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
+                                "domainnet126": 126, "office31": 31, "visda": 12
                                 }
     return dataset_name2num_classes[dataset_name]
 

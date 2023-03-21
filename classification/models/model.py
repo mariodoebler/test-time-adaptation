@@ -19,47 +19,35 @@ MEAN = (0.485, 0.456, 0.406)
 STD = (0.229, 0.224, 0.225)
 
 
-def get_torchvision_model(model_name, pretrained=True):
-    if model_name == "resnet18":
-        model = models.resnet18(pretrained=pretrained)
-    elif model_name == "resnet50":
-        model = models.resnet50(pretrained=pretrained)
-    elif model_name == "resnet101":
-        model = models.resnet101(pretrained=pretrained)
-    elif model_name == "resnet152":
-        model = models.resnet152(pretrained=pretrained)
-    elif model_name == "alexnet":   # no BN
-        model = models.alexnet(pretrained=pretrained)
-    elif model_name == "squeezenet1_0":  # no BN
-        model = models.squeezenet1_0(pretrained=pretrained)
-    elif model_name == "vgg16":  # no BN
-        model = models.vgg16(pretrained=pretrained)
-    elif model_name == "densenet161":
-        model = models.densenet161(pretrained=pretrained)
-    elif model_name == "inception_v3":
-        model = models.inception_v3(pretrained=pretrained)
-    elif model_name == "googlenet":
-        model = models.googlenet(pretrained=pretrained)
-    elif model_name == "shufflenet_v2_x1_0":
-        model = models.shufflenet_v2_x1_0(pretrained=pretrained)
-    elif model_name == "mobilenet_v2":
-        model = models.mobilenet_v2(pretrained=pretrained)
-    elif model_name == "resnext50_32x4d":
-        model = models.resnext50_32x4d(pretrained=pretrained)
-    elif model_name == "wide_resnet50_2":
-        model = models.wide_resnet50_2(pretrained=pretrained)
-    elif model_name == "mnasnet1_0":
-        model = models.mnasnet1_0(pretrained=pretrained)
-    elif model_name == "efficientnet_b7":
-        model = models.efficientnet_b7(pretrained=pretrained)
-    elif model_name == "vit_b_16":  # no BN
-        model = models.vit_b_16(pre_train=True)
-    else:
-        raise ValueError(f"Model {model_name} is not supported!")
+def get_torchvision_model(model_name, weight_version="IMAGENET1K_V1"):
+    """
+    Further details can be found here: https://pytorch.org/vision/0.14/models.html
+    :param model_name: name of the model to create
+    :param weight_version: name of the pre-trained weights to restore
+    :return:
+    """
+    # create a dictionary that maps the model name to the corresponding weight function
+    name_to_weights = {name[:-8].lower(): name for name in dir(models) if "Weights" in name}
+    if not model_name in name_to_weights.keys():
+        raise ValueError(f"Model name '{model_name}' is not supported. Choose from: {name_to_weights.keys()}")
 
-    # add ImageNet input normalization to the model
-    model = normalize_model(model, MEAN, STD)
-    logger.info(f"Successfully restored ImageNet pre-trained weights for: {model_name}")
+    # get the weight function and check if the specified type of weights is available
+    model_weights = getattr(models, name_to_weights[model_name])
+    available_weight_versions = [version for version in dir(model_weights) if "IMAGENET1K" in version]
+    if not weight_version in available_weight_versions:
+        raise ValueError(f"Weight type '{weight_version}' is not supported. Choose from: {available_weight_versions}")
+
+    # restore the specified weights
+    model_weights = getattr(model_weights, weight_version)
+
+    # setup the specified model and initialize it with the pre-trained weights
+    model = getattr(models, model_name)
+    model = model(weights=model_weights)
+
+    # get the transformation and add the input normalization to the model
+    transform = model_weights.transforms()
+    model = normalize_model(model, transform.mean, transform.std)
+    logger.info(f"Successfully restored '{weight_version}' pre-trained weights for model '{model_name}'!")
     return model
 
 

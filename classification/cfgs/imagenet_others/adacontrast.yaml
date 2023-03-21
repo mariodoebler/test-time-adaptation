@@ -1,0 +1,20 @@
+CORRUPTION:
+  DATASET: imagenet_r
+  SEVERITY:
+    - ""
+  TYPE:
+    - ""
+MODEL:
+  ADAPTATION: adacontrast
+  ARCH: resnet50
+OPTIM:
+  METHOD: SGD
+  LR: 0.0002
+  MOMENTUM: 0.9
+  WD: 0.0001
+  STEPS: 1
+  NESTEROV: True
+CONTRAST:
+  TEMPERATURE: 0.07
+TEST:
+  BATCH_SIZE: 64

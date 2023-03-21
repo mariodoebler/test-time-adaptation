@@ -1,0 +1,17 @@
+CORRUPTION:
+  DATASET: imagenet_r
+  SEVERITY:
+    - ""
+  TYPE:
+    - ""
+MODEL:
+  ADAPTATION: tent
+  ARCH: resnet50
+OPTIM:
+  BETA: 0.9
+  LR: 0.00025
+  METHOD: SGD
+  STEPS: 1
+  WD: 0.0
+TEST:
+  BATCH_SIZE: 64

@@ -1,0 +1,20 @@
+CORRUPTION:
+  DATASET: imagenet_r
+  SEVERITY:
+    - ""
+  TYPE:
+    - ""
+MODEL:
+  ADAPTATION: memo
+  ARCH: resnet50
+  EPISODIC: True
+OPTIM:
+  BETA: 0.9
+  LR: 0.00025
+  METHOD: SGD
+  STEPS: 1
+  WD: 0.0
+TEST:
+  BATCH_SIZE: 1
+  WINDOW_LENGTH: 1
+  N_AUGMENTATIONS: 64

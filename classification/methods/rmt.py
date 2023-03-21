@@ -58,8 +58,7 @@ class RMT(TTAMethod):
         if self.dataset_name == "domainnet126":
             fname = f"protos_{self.dataset_name}_{ckpt_path.split(os.sep)[-1].split('_')[1]}.pth"
         else:
-            # fname = f"protos_{self.dataset_name}_{arch_name}.pth"
-            fname = f"protos_{self.dataset_name}.pth"
+            fname = f"protos_{self.dataset_name}_{arch_name}.pth"
         fname = os.path.join(proto_dir_path, fname)
 
         # get source prototypes
@@ -72,9 +71,10 @@ class RMT(TTAMethod):
             labels_src = torch.tensor([])
             logger.info("Extracting source prototypes...")
             with torch.no_grad():
-                for x, y in tqdm.tqdm(self.src_loader):
+                for data in tqdm.tqdm(self.src_loader):
+                    x, y = data[0], data[1]
                     tmp_features = self.feature_extractor(x.cuda())
-                    features_src = torch.cat([features_src, tmp_features.cpu()], dim=0)
+                    features_src = torch.cat([features_src, tmp_features.view(tmp_features.shape[:2]).cpu()], dim=0)
                     labels_src = torch.cat([labels_src, y], dim=0)
                     if len(features_src) > 100000:
                         break
@@ -104,9 +104,10 @@ class RMT(TTAMethod):
         if self.warmup_steps > 0:
             warmup_ckpt_path = os.path.join(ckpt_dir, "warmup")
             if self.dataset_name == "domainnet126":
-                ckpt_path = f"ckpt_warmup_{self.dataset_name}_{ckpt_path.split(os.sep)[-1].split('_')[1]}.pth"
+                source_domain = ckpt_path.split(os.sep)[-1].split('_')[1]
+                ckpt_path = f"ckpt_warmup_{self.dataset_name}_{source_domain}_{arch_name}_bs{self.src_loader.batch_size}.pth"
             else:
-                ckpt_path = f"ckpt_warmup_{self.dataset_name}.pth"
+                ckpt_path = f"ckpt_warmup_{self.dataset_name}_{arch_name}_bs{self.src_loader.batch_size}.pth"
             ckpt_path = os.path.join(warmup_ckpt_path, ckpt_path)
 
             if os.path.exists(ckpt_path):
@@ -116,7 +117,7 @@ class RMT(TTAMethod):
                 self.model_ema.load_state_dict(checkpoint["model_ema"])
                 self.optimizer.load_state_dict(checkpoint["optimizer"])
                 logger.info(f"Loaded from {ckpt_path}")
-            else:   
+            else:
                 os.makedirs(warmup_ckpt_path, exist_ok=True)
                 self.warmup()
                 torch.save({"model": self.model.state_dict(),
@@ -139,17 +140,18 @@ class RMT(TTAMethod):
 
             # sample source batch
             try:
-                imgs_src, labels_src = next(self.src_loader_iter)
+                batch = next(self.src_loader_iter)
             except StopIteration:
                 self.src_loader_iter = iter(self.src_loader)
-                imgs_src, labels_src = next(self.src_loader_iter)
+                batch = next(self.src_loader_iter)
 
+            imgs_src, labels_src = batch[0], batch[1]
             imgs_src, labels_src = imgs_src.cuda(), labels_src.cuda().long()
 
             # forward the test data and optimize the model
             outputs = self.model(imgs_src)
             outputs_ema = self.model_ema(imgs_src)
-            loss = (softmax_entropy(outputs, outputs_ema)).mean(0)
+            loss = symmetric_cross_entropy(outputs, outputs_ema).mean(0)
             loss.backward()
             self.optimizer.step()
             self.optimizer.zero_grad()
@@ -236,31 +238,34 @@ class RMT(TTAMethod):
 
         with torch.no_grad():
             # dist[:, i] contains the distance from every source sample to one test sample
-            dist = F.cosine_similarity(self.prototypes_src.repeat(1, features_test.shape[0], 1),
-                                       features_test.unsqueeze(0).repeat(self.prototypes_src.shape[0], 1, 1), dim=-1)
+            dist = F.cosine_similarity(
+                x1=self.prototypes_src.repeat(1, features_test.shape[0], 1),
+                x2=features_test.view(1, features_test.shape[0], features_test.shape[1]).repeat(self.prototypes_src.shape[0], 1, 1),
+                dim=-1)
 
             # for every test feature, get the nearest source prototype and derive the label
             _, indices = dist.topk(1, largest=True, dim=0)
             indices = indices.squeeze(0)
 
         features = torch.cat([self.prototypes_src[indices],
-                              features_test.unsqueeze(1),
-                              features_aug_test.unsqueeze(1)], dim=1)
+                              features_test.view(features_test.shape[0], 1, features_test.shape[1]),
+                              features_aug_test.view(features_test.shape[0], 1, features_test.shape[1])], dim=1)
         loss_contrastive = self.contrastive_loss(features=features, labels=None)
 
-        loss_entropy = symmetric_entropy(x=outputs_test, x_aug=outputs_aug_test, x_ema=outputs_ema).mean(0)
+        loss_entropy = self_training(x=outputs_test, x_aug=outputs_aug_test, x_ema=outputs_ema).mean(0)
         loss_trg = self.lambda_ce_trg * loss_entropy + self.lambda_cont * loss_contrastive
         loss_trg.backward()
 
         if self.lambda_ce_src > 0:
             # sample source batch
             try:
-                imgs_src, labels_src = next(self.src_loader_iter)
+                batch = next(self.src_loader_iter)
             except StopIteration:
                 self.src_loader_iter = iter(self.src_loader)
-                imgs_src, labels_src = next(self.src_loader_iter)
+                batch = next(self.src_loader_iter)
 
             # train on labeled source data
+            imgs_src, labels_src = batch[0], batch[1]
             features_src = self.feature_extractor(imgs_src.cuda())
             outputs_src = self.classifier(features_src)
             loss_ce_src = F.cross_entropy(outputs_src, labels_src.cuda().long())
@@ -289,7 +294,8 @@ class RMT(TTAMethod):
     @staticmethod
     def configure_model(model):
         """Configure model"""
-        model.train()
+        # model.train()
+        model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
         # disable grad, to (re-)enable only what we update
         model.requires_grad_(False)
         # enable all trainable
@@ -300,16 +306,20 @@ class RMT(TTAMethod):
                 m.track_running_stats = False
                 m.running_mean = None
                 m.running_var = None
+            elif isinstance(m, nn.BatchNorm1d):
+                m.train()   # always forcing train mode in bn1d will cause problems for single sample tta
+                m.requires_grad_(True)
             else:
                 m.requires_grad_(True)
         return model
 
 
 @torch.jit.script
-def symmetric_entropy(x, x_aug, x_ema):# -> torch.Tensor:
+def self_training(x, x_aug, x_ema):# -> torch.Tensor:
     return - 0.25 * (x_ema.softmax(1) * x.log_softmax(1)).sum(1) - 0.25 * (x.softmax(1) * x_ema.log_softmax(1)).sum(1) \
            - 0.25 * (x_ema.softmax(1) * x_aug.log_softmax(1)).sum(1) - 0.25 * (x_aug.softmax(1) * x_ema.log_softmax(1)).sum(1)
 
+
 @torch.jit.script
-def softmax_entropy(x, x_ema):# -> torch.Tensor:
+def symmetric_cross_entropy(x, x_ema):# -> torch.Tensor:
     return -0.5*(x_ema.softmax(1) * x.log_softmax(1)).sum(1)-0.5*(x.softmax(1) * x_ema.log_softmax(1)).sum(1)

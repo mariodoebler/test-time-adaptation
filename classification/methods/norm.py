@@ -21,4 +21,3 @@ class Norm(TTAMethod):
 
     def reset(self):
         self.model.load_state_dict(self.model_state, strict=True)
-

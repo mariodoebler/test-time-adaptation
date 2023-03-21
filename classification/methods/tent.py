@@ -1,8 +1,3 @@
-"""
-Builds upon: https://github.com/DequanWang/tent
-Corresponding paper: https://arxiv.org/abs/2006.10726
-"""
-
 import torch.nn as nn
 import torch.jit
 
@@ -53,7 +48,8 @@ class Tent(TTAMethod):
     def configure_model(model):
         """Configure model for use with tent."""
         # train mode, because tent optimizes the model to minimize entropy
-        model.train()
+        # model.train()
+        model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
         # disable grad, to (re-)enable only what tent updates
         model.requires_grad_(False)
         # configure norm for tent updates: enable grad + force batch statisics
@@ -64,7 +60,10 @@ class Tent(TTAMethod):
                 m.track_running_stats = False
                 m.running_mean = None
                 m.running_var = None
-            elif isinstance(m, nn.LayerNorm) or isinstance(m, nn.GroupNorm):
+            elif isinstance(m, nn.BatchNorm1d):
+                m.train()   # always forcing train mode in bn1d will cause problems for single sample tta
+                m.requires_grad_(True)
+            elif isinstance(m, (nn.LayerNorm, nn.GroupNorm)):
                 m.requires_grad_(True)
 
         return model

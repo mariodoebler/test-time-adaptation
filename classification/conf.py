@@ -23,8 +23,8 @@ cfg = _C
 
 # ---------------------------------- Misc options --------------------------- #
 
-# Setting - continual: do not reset, consider corruptions as a sequence; reset_each_shift: reset after each corruption
-_C.SETTING = "continual"  # ["continual", "reset_each_shift", "non_stationary", "correlated", "non_stationary_correlated"]
+# Setting - see README.md for more information
+_C.SETTING = "continual"
 
 # Data directory
 _C.DATA_DIR = "./data"

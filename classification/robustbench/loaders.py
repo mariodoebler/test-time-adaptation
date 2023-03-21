@@ -1,5 +1,6 @@
 """
 This file is based on the code from https://github.com/pytorch/vision/blob/master/torchvision/datasets/folder.py.
+Adapted from: https://github.com/RobustBench/robustbench/blob/master/robustbench/loaders.py
 """
 from torchvision.datasets.vision import VisionDataset
 
@@ -100,12 +101,13 @@ class CustomDatasetFolder(VisionDataset):
             tuple: (sample, target) where target is class_index of the target class.
         """
         path, target = self.samples[index]
+        domain = path.split(os.sep)[-4]
         sample = self.loader(path)
         if self.transform is not None:
             sample = self.transform(sample)
         if self.target_transform is not None:
             target = self.target_transform(target)
-        return sample, target, path
+        return sample, target, domain, path
 
     def __len__(self):
         return len(self.samples)
@@ -167,7 +169,7 @@ class CustomImageFolder(CustomDatasetFolder):
                                                 transform=transform,
                                                 target_transform=target_transform,
                                                 is_valid_file=is_valid_file)
-                                          
+
         self.imgs = self.samples
 
 
@@ -179,14 +181,14 @@ class CustomCifarDataset(data.Dataset):
         self.transform = transform
 
     def __getitem__(self, index):
-        img, label = self.samples[index]
+        img, label, domain = self.samples[index]
         if self.transform is not None:
             img = Image.fromarray(np.uint8(img * 255.)).convert('RGB')
             img = self.transform(img)
         else:
             img = torch.tensor(img.transpose((2, 0, 1)))
 
-        return img, torch.tensor(label)
+        return img, torch.tensor(label), domain
 
     def __len__(self):
         return len(self.samples)

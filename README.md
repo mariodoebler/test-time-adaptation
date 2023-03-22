@@ -39,9 +39,9 @@ This repository allows to study a wide range of different datasets, models, sett
   - `reset_each_shift` Reset the model state after the adaptation to a domain.
   - `continual` Train the model on a sequence of domains without knowing when a domain shift occurs.
   - `gradual` Train the model on a sequence of gradually increasing/decreasing domain shifts without knowing when a domain shift occurs.
-  - `non_stationary` Train the model on one long test sequence where consecutive test samples are likely to originate from different domains.
+  - `mixed_domains` Train the model on one long test sequence where consecutive test samples are likely to originate from different domains.
   - `correlated` Same as the continual setting but the samples of each domain are further sorted by class label.
-  - `non_stationary_correlated` Mixed domains and sorted by class label.
+  - `mixed_domains_correlated` Mixed domains and sorted by class label.
   - Combinations like `gradual_correlated` or `reset_each_shift_correlated` are also possible.
 
 - **Methods**

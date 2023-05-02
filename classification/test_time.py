@@ -235,7 +235,8 @@ def setup_cotta(model):
                         dataset_name=cfg.CORRUPTION.DATASET,
                         mt_alpha=cfg.M_TEACHER.MOMENTUM,
                         rst_m=cfg.COTTA.RST,
-                        ap=cfg.COTTA.AP)
+                        ap=cfg.COTTA.AP,
+                        n_augmentations=cfg.TEST.N_AUGMENTATIONS)
     return cotta_model, param_names
 
 

@@ -46,7 +46,7 @@ def get_transform(dataset_name, adaptation):
         elif dataset_name in {"cifar10_c", "cifar100_c"}:
             transform = None
         elif dataset_name == "imagenet_c":
-            # note that ImageNet-C is already resized an centre cropped
+            # note that ImageNet-C is already resized and centre cropped
             transform = transforms.Compose([transforms.ToTensor()])
         elif dataset_name in {"domainnet126"}:
             transform = get_augmentation(aug_type="test", res_size=256, crop_size=224)
@@ -59,9 +59,11 @@ def get_transform(dataset_name, adaptation):
     return transform
 
 
-def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, severity, num_examples, domain_names_all, batch_size=128, shuffle=False, workers=4):
+def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, severity, num_examples, domain_names_all, alpha_dirichlet=0, batch_size=128, shuffle=False, workers=4):
     # Fix seed again to ensure that the test sequence is the same for all methods
     random.seed(1)
+    np.random.seed(1)
+
     data_dir = complete_data_dir_path(root=root_dir, dataset_name=dataset_name)
     transform = get_transform(dataset_name, adaptation)
 
@@ -122,8 +124,13 @@ def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, se
 
         if "correlated" in setting:
             # sort the file paths by label
-            logger.info(f"Sorting the file paths by class labels...")
-            test_dataset.samples.sort(key=lambda x: x[1])
+            if alpha_dirichlet > 0:
+                logger.info(f"Using Dirichlet distribution with alpha={alpha_dirichlet} to temporally correlated samples by class labels...")
+                test_dataset.samples = sort_by_dirichlet(alpha_dirichlet, samples=test_dataset.samples)
+            else:
+                # sort the class labels by ascending order
+                logger.info(f"Sorting the file paths by class labels...")
+                test_dataset.samples.sort(key=lambda x: x[1])
         elif dataset_name in {"imagenet_k", "imagenet_r", "imagenet_a", "imagenet_d", "imagenet_d109", "office31", "visda"} or domain_name == "none":
             # shuffle the data since it is sorted by class
             random.shuffle(test_dataset.samples)
@@ -199,3 +206,54 @@ def get_source_loader(dataset_name, root_dir, adaptation, batch_size, train_spli
                                                 drop_last=False)
     logger.info(f"Number of images and batches in source loader: #img = {len(source_dataset)} #batches = {len(source_loader)}")
     return source_dataset, source_loader
+
+
+def sort_by_dirichlet(alpha_dirichlet, samples):
+    """
+    Adapted from: https://github.com/TaesikGong/NOTE/blob/main/learner/dnn.py
+    Sort classes according to a dirichlet distribution
+    :param alpha_dirichlet: Parameter of the distribution
+    :param samples: list containing all data sample pairs (file_path, class_label)
+    :return: list of sorted class samples
+    """
+
+    N = len(samples)
+    samples_sorted = []
+    class_labels = np.array([val[1] for val in samples])
+    num_classes = np.max(class_labels) + 1
+    dirichlet_numchunks = num_classes
+
+    # https://github.com/IBM/probabilistic-federated-neural-matching/blob/f44cf4281944fae46cdce1b8bc7cde3e7c44bd70/experiment.py
+    min_size = -1
+    min_size_thresh = 10
+    while min_size < min_size_thresh:  # prevent any chunk having too less data
+        idx_batch = [[] for _ in range(dirichlet_numchunks)]
+        idx_batch_cls = [[] for _ in range(dirichlet_numchunks)]  # contains data per each class
+        for k in range(num_classes):
+            idx_k = np.where(class_labels == k)[0]
+            np.random.shuffle(idx_k)
+            proportions = np.random.dirichlet(np.repeat(alpha_dirichlet, dirichlet_numchunks))
+
+            # balance
+            proportions = np.array([p * (len(idx_j) < N / dirichlet_numchunks) for p, idx_j in zip(proportions, idx_batch)])
+            proportions = proportions / proportions.sum()
+            proportions = (np.cumsum(proportions) * len(idx_k)).astype(int)[:-1]
+            idx_batch = [idx_j + idx.tolist() for idx_j, idx in zip(idx_batch, np.split(idx_k, proportions))]
+            min_size = min([len(idx_j) for idx_j in idx_batch])
+
+            # store class-wise data
+            for idx_j, idx in zip(idx_batch_cls, np.split(idx_k, proportions)):
+                idx_j.append(idx)
+
+    sequence_stats = []
+
+    # create temporally correlated sequence
+    for chunk in idx_batch_cls:
+        cls_seq = list(range(num_classes))
+        np.random.shuffle(cls_seq)
+        for cls in cls_seq:
+            idx = chunk[cls]
+            samples_sorted.extend([samples[i] for i in idx])
+            sequence_stats.extend(list(np.repeat(cls, len(idx))))
+
+    return samples_sorted

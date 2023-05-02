@@ -202,6 +202,22 @@ _C.EATA.NUM_SAMPLES = 2000
 # Diversity margin
 _C.EATA.D_MARGIN = 0.05
 
+# --------------------------------- SAR options ---------------------------- #
+_C.SAR = CfgNode()
+
+# Threshold e_m for model recovery scheme
+_C.SAR.RESET_CONSTANT_EM = 0.2
+
+# --------------------------------- ROTTA options ---------------------------- #
+_C.ROTTA = CfgNode()
+
+_C.ROTTA.MEMORY_SIZE = 64
+_C.ROTTA.UPDATE_FREQUENCY = 64
+_C.ROTTA.NU = 0.001
+_C.ROTTA.ALPHA = 0.05
+_C.ROTTA.LAMBDA_T = 1.0
+_C.ROTTA.LAMBDA_U = 1.0
+
 # ------------------------------- Source options ---------------------------- #
 _C.SOURCE = CfgNode()
 
@@ -225,6 +241,9 @@ _C.TEST.WINDOW_LENGTH = 1
 
 # Number of augmentations for methods relying on TTA (test time augmentation)
 _C.TEST.N_AUGMENTATIONS = 32
+
+# The alpha value of the dirichlet distribution used for sorting the class labels.
+_C.TEST.ALPHA_DIRICHLET = 0.0
 
 # --------------------------------- CUDNN options --------------------------- #
 _C.CUDNN = CfgNode()

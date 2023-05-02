@@ -1,6 +1,6 @@
 import logging
-import numpy as np
 
+import timm
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -9,22 +9,19 @@ from robustbench.model_zoo.architectures.utils_architectures import normalize_mo
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 
+from copy import deepcopy
 from models import resnet_bit, resnet26, resnet_gn
 from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_D109_MASK
 
 logger = logging.getLogger(__name__)
 
-# ImageNet normalization for torchvision pre-trained model
-MEAN = (0.485, 0.456, 0.406)
-STD = (0.229, 0.224, 0.225)
-
 
 def get_torchvision_model(model_name, weight_version="IMAGENET1K_V1"):
     """
     Further details can be found here: https://pytorch.org/vision/0.14/models.html
-    :param model_name: name of the model to create
+    :param model_name: name of the model to create and initialize with pre-trained weights
     :param weight_version: name of the pre-trained weights to restore
-    :return:
+    :return: pre-trained model
     """
     # create a dictionary that maps the model name to the corresponding weight function
     name_to_weights = {name[:-8].lower(): name for name in dir(models) if "Weights" in name}
@@ -47,7 +44,35 @@ def get_torchvision_model(model_name, weight_version="IMAGENET1K_V1"):
     # get the transformation and add the input normalization to the model
     transform = model_weights.transforms()
     model = normalize_model(model, transform.mean, transform.std)
-    logger.info(f"Successfully restored '{weight_version}' pre-trained weights for model '{model_name}'!")
+    logger.info(f"Successfully restored '{weight_version}' pre-trained weights for model '{model_name}' from torchvision!")
+    return model
+
+
+def get_timm_model(model_name):
+    """
+    Restore a pre-trained model from timm: https://github.com/huggingface/pytorch-image-models/tree/main/timm
+    Quickstart: https://huggingface.co/docs/timm/quickstart
+    :param model_name: name of the model to create and initialize with pre-trained weights
+    :return: pre-trained model
+    """
+    # check if the defined model name is supported as pre-trained model
+    available_models = timm.list_models(pretrained=True)
+    if not model_name in available_models:
+        raise ValueError(f"Model '{model_name}' is not available. Choose from: {available_models}")
+
+    # setup pre-trained model
+    model = timm.create_model(model_name, pretrained=True)
+    logger.info(f"Successfully restored the weights of '{model_name}' from timm.")
+
+    # add the corresponding input normalization to the model
+    if hasattr(model, "pretrained_cfg"):
+        logger.info(f"General model information: {model.pretrained_cfg}")
+        logger.info(f"Adding input normalization to the model using: mean={model.pretrained_cfg['mean']} \t std={model.pretrained_cfg['std']}")
+        model = normalize_model(model, mean=model.pretrained_cfg["mean"], std=model.pretrained_cfg["std"])
+    else:
+        raise AttributeError(f"Attribute 'pretrained_cfg' is missing for model '{model_name}' from timm."
+                             f" This prevents adding the correct input normalization to the model!")
+
     return model
 
 
@@ -87,7 +112,7 @@ class ResNetDomainNet126(torch.nn.Module):
             logger.warning(f"No checkpoint path was specified. Continue with ImageNet pre-trained weights!")
 
         # add input normalization to the model
-        self.encoder = nn.Sequential(ImageNormalizer(MEAN, STD), self.encoder)
+        self.encoder = nn.Sequential(ImageNormalizer((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)), self.encoder)
 
     def forward(self, x, return_feats=False):
         # 1) encoder feature
@@ -246,36 +271,25 @@ def get_model(cfg, num_classes):
         try:
             # load model from torchvision
             base_model = get_torchvision_model(cfg.MODEL.ARCH, weight_version=cfg.MODEL.WEIGHTS)
-
         except ValueError:
             try:
-                # load some custom models
-                if cfg.MODEL.ARCH == "resnet26_gn":
-                    base_model = resnet26.build_resnet26()
-                    checkpoint = torch.load(cfg.CKPT_PATH, map_location="cpu")
-                    base_model.load_state_dict(checkpoint['net'])
-                    base_model = normalize_model(base_model, resnet26.MEAN, resnet26.STD)
-                elif cfg.MODEL.ARCH == "resnet50_gn":
-                    base_model = resnet_gn.build_resnet50_gn()
-                    checkpoint = torch.load(cfg.CKPT_PATH, map_location="cpu")
-                    new_params = base_model.state_dict().copy()
-                    for key in checkpoint['state_dict']:
-                        new_params[".".join(key.split(".")[1:])] = checkpoint['state_dict'][key]
-                    base_model.load_state_dict(new_params)
-                    # add input normalization to the model
-                    base_model = normalize_model(base_model, MEAN, STD)
-                elif cfg.MODEL.ARCH in resnet_bit.KNOWN_MODELS.keys():
-                    base_model = resnet_bit.KNOWN_MODELS[cfg.MODEL.ARCH](head_size=1000)#num_classes)   # TODO: fix bug
-                    base_model.load_from(np.load(cfg.CKPT_PATH))
-                    # add input normalization to the model
-                    base_model = normalize_model(base_model, resnet_bit.MEAN, resnet_bit.STD)
-                else:
-                    raise ValueError(f"Model {cfg.MODEL.ARCH} is not supported!")
-                logger.info(f"Successfully restored model '{cfg.MODEL.ARCH}' from: {cfg.CKPT_PATH}")
+                # load model from timm
+                base_model = get_timm_model(cfg.MODEL.ARCH)
             except ValueError:
-                # load model from robustbench
-                dataset_name = cfg.CORRUPTION.DATASET.split("_")[0]
-                base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR, dataset_name, ThreatModel.corruptions)
+                try:
+                    # load some custom models
+                    if cfg.MODEL.ARCH == "resnet26_gn":
+                        base_model = resnet26.build_resnet26()
+                        checkpoint = torch.load(cfg.CKPT_PATH, map_location="cpu")
+                        base_model.load_state_dict(checkpoint['net'])
+                        base_model = normalize_model(base_model, resnet26.MEAN, resnet26.STD)
+                    else:
+                        raise ValueError(f"Model {cfg.MODEL.ARCH} is not supported!")
+                    logger.info(f"Successfully restored model '{cfg.MODEL.ARCH}' from: {cfg.CKPT_PATH}")
+                except ValueError:
+                    # load model from robustbench
+                    dataset_name = cfg.CORRUPTION.DATASET.split("_")[0]
+                    base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR, dataset_name, ThreatModel.corruptions)
 
         if cfg.CORRUPTION.DATASET == "imagenet_a":
             base_model = ImageNetXWrapper(base_model, IMAGENET_A_MASK)
@@ -296,7 +310,15 @@ def split_up_model(model, arch_name, dataset_name):
     :param dataset_name: name of the dataset
     :return: encoder and classifier
     """
-    if arch_name == "Standard" and dataset_name in {"cifar10", "cifar10_c"}:
+    if hasattr(model.model, model.model.pretrained_cfg["classifier"]):
+        # split up models loaded from timm
+        classifier = deepcopy(getattr(model.model, model.model.pretrained_cfg["classifier"]))
+        encoder = model
+        encoder.model.reset_classifier(0)
+        if isinstance(model, ImageNetXWrapper):
+            encoder = nn.Sequential(encoder.normalize, encoder.model)
+
+    elif arch_name == "Standard" and dataset_name in {"cifar10", "cifar10_c"}:
         encoder = nn.Sequential(*list(model.children())[:-1], nn.AvgPool2d(kernel_size=8, stride=8), nn.Flatten())
         classifier = model.fc
     elif arch_name == "Hendrycks2020AugMix_WRN":
@@ -334,9 +356,6 @@ def split_up_model(model, arch_name, dataset_name):
     elif "convnext" in arch_name:
         encoder = nn.Sequential(model.normalize, model.model.features, model.model.avgpool)
         classifier = model.model.classifier
-    elif "BiT-" in arch_name:
-        encoder = nn.Sequential(model.normalize, model.model.root, model.model.body)
-        classifier = nn.Sequential(model.model.head, nn.Flatten())
     elif arch_name == "mobilenet_v2":
         encoder = nn.Sequential(model.normalize, model.model.features, nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten())
         classifier = model.model.classifier

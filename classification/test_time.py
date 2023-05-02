@@ -22,6 +22,8 @@ from methods.rmt import RMT
 from methods.eata import EATA
 from methods.norm import Norm
 from methods.lame import LAME
+from methods.sar import SAR, SAM
+from methods.rotta import RoTTA
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +69,10 @@ def evaluate(description):
         model, param_names = setup_eta(base_model, num_classes)
     elif cfg.MODEL.ADAPTATION == "eata":
         model, param_names = setup_eata(base_model, num_classes)
+    elif cfg.MODEL.ADAPTATION == "sar":
+        model, param_names = setup_sar(base_model, num_classes)
+    elif cfg.MODEL.ADAPTATION == "rotta":
+        model, param_names = setup_rotta(base_model, num_classes)
     elif cfg.MODEL.ADAPTATION == "gtta":
         model, param_names = setup_gtta(base_model, num_classes)
     elif cfg.MODEL.ADAPTATION == "rmt":
@@ -331,6 +337,38 @@ def setup_eata(model, num_classes):
                      d_margin=cfg.EATA.D_MARGIN)
 
     return eta_model, param_names
+
+
+def setup_sar(model, num_classes):
+    model = SAR.configure_model(model)
+    params, param_names = SAR.collect_params(model)
+    base_optimizer = torch.optim.SGD
+    optimizer = SAM(params, base_optimizer, lr=cfg.OPTIM.LR, momentum=cfg.OPTIM.MOMENTUM)
+    sar_model = SAR(model, optimizer,
+                    steps=cfg.OPTIM.STEPS,
+                    episodic=cfg.MODEL.EPISODIC,
+                    window_length=cfg.TEST.WINDOW_LENGTH,
+                    margin_e0=math.log(num_classes)*0.40,
+                    reset_constant_em=cfg.SAR.RESET_CONSTANT_EM)
+    return sar_model, param_names
+
+
+def setup_rotta(model, num_classes):
+    model = RoTTA.configure_model(model, alpha=cfg.ROTTA.ALPHA)
+    params, param_names = RoTTA.collect_params(model)
+    optimizer = setup_optimizer(params)
+    sar_model = RoTTA(model, optimizer,
+                      steps=cfg.OPTIM.STEPS,
+                      episodic=cfg.MODEL.EPISODIC,
+                      window_length=cfg.TEST.WINDOW_LENGTH,
+                      dataset_name=cfg.CORRUPTION.DATASET,
+                      memory_size=cfg.ROTTA.MEMORY_SIZE,
+                      num_classes=num_classes,
+                      lambda_t=cfg.ROTTA.LAMBDA_T,
+                      lambda_u=cfg.ROTTA.LAMBDA_U,
+                      nu=cfg.ROTTA.NU,
+                      update_freq=cfg.ROTTA.UPDATE_FREQUENCY)
+    return sar_model, param_names
 
 
 def setup_gtta(model, num_classes):

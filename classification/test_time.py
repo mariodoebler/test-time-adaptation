@@ -344,7 +344,7 @@ def setup_eata(model, num_classes):
 def setup_sar(model, num_classes):
     model = SAR.configure_model(model)
     params, param_names = SAR.collect_params(model)
-    base_optimizer = torch.optim.SGD
+    base_optimizer = optim.SGD
     optimizer = SAM(params, base_optimizer, lr=cfg.OPTIM.LR, momentum=cfg.OPTIM.MOMENTUM)
     sar_model = SAR(model, optimizer,
                     steps=cfg.OPTIM.STEPS,

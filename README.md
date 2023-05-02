@@ -29,12 +29,11 @@ This repository allows to study a wide range of different datasets, models, sett
   - `domainnet126` [DomainNet (cleaned)](http://ai.bu.edu/M3SDA/)
 
 - **Models**
-  - For adapting to ImageNet variations, all pre-trained models available in [Torchvision](https://pytorch.org/vision/0.14/models.html) can be used.
+  - For adapting to ImageNet variations, all pre-trained models available in [Torchvision](https://pytorch.org/vision/0.14/models.html) or [timm](https://github.com/huggingface/pytorch-image-models/tree/v0.6.13) can be used.
   - For the corruption benchmarks, pre-trained models from [RobustBench](https://github.com/RobustBench/robustbench) can be used.
   - For the DomainNet-126 benchmark, there is a pre-trained model for each domain.
-  - Further models include [ResNet-26 GN](https://github.com/zhangmarvin/memo), [ResNet-50 GN](https://github.com/ppwwyyxx/GroupNorm-reproduce/tree/master/ImageNet-ResNet-PyTorch),
-  and [BiT](https://github.com/google-research/big_transfer).
-
+  - Further models include [ResNet-26 GN](https://github.com/zhangmarvin/memo).
+  
 - **Settings**
   - `reset_each_shift` Reset the model state after the adaptation to a domain.
   - `continual` Train the model on a sequence of domains without knowing when a domain shift occurs.
@@ -48,6 +47,7 @@ This repository allows to study a wide range of different datasets, models, sett
   - The repository currently supports the following methods: BN-0 (source), BN-alpha, BN-1, [TENT](https://openreview.net/pdf?id=uXl3bZLkr3c),
   [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
   [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
+  [SAR](https://arxiv.org/pdf/2302.12400.pdf), [RoTTA](https://arxiv.org/pdf/2303.13899.pdf),
   [GTTA](https://arxiv.org/abs/2208.07736), and [RMT](https://arxiv.org/abs/2211.13081).
 
 
@@ -75,12 +75,12 @@ Next, specify the root folder for all datasets `_C.DATA_DIR = "./data"` in the f
 
 We provide config files for all experiments and methods. Simply run the following Python file with the corresponding config file.
 ```bash
-python test_time.py --cfg cfgs/[cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/eta/eata/cotta/adacontrast/lame/gtta/rmt].yaml
+python test_time.py --cfg cfgs/[cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/eta/eata/cotta/adacontrast/lame/sar/rotta/gtta/rmt].yaml
 ```
 
 For imagenet_others, the argument CORRUPTION.DATASET has to be passed:
 ```bash
-python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/eta/eata/cotta/adacontrast/lame/gtta/rmt].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_d109]
+python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/eta/eata/cotta/adacontrast/lame/sar/rotta/gtta/rmt].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_d109]
 ```
 
 E.g., to run RMT for the ImageNet-to-ImageNet-R benchmark, run the following command.
@@ -99,7 +99,7 @@ For GTTA, we provide checkpoint files for the style transfer network. The checkp
 
 ### Changing Configurations
 Changing the evaluation configuration is extremely easy. For example, to run TENT on ImageNet-to-ImageNet-C in the `reset_each_shift` setting with a ResNet-50 and the `IMAGENET1K_V1` initialization, the arguments below have to be passed. 
-Further models and initializations can be found [here](https://pytorch.org/vision/0.14/models.html).
+Further models and initializations can be found [here (torchvision)](https://pytorch.org/vision/0.14/models.html) or [here (timm)](https://github.com/huggingface/pytorch-image-models/tree/v0.6.13).
 ```bash
 python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WEIGHTS IMAGENET1K_V1 SETTING reset_each_shift
 ```
@@ -113,6 +113,8 @@ python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WE
 + EATA [official](https://github.com/mr-eggplant/EATA)
 + LAME [official](https://github.com/fiveai/LAME)
 + MEMO [official](https://github.com/zhangmarvin/memo)
++ RoTTA [official](https://github.com/BIT-DA/RoTTA)
++ SAR [official](https://github.com/mr-eggplant/SAR)
 
 
 ## Segmentation

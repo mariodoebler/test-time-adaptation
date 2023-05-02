@@ -125,6 +125,7 @@ def evaluate(description):
                                                severity=severity,
                                                num_examples=cfg.CORRUPTION.NUM_EX,
                                                domain_names_all=dom_names_all,
+                                               alpha_dirichlet=cfg.TEST.ALPHA_DIRICHLET,
                                                batch_size=cfg.TEST.BATCH_SIZE,
                                                shuffle=False,
                                                workers=min(cfg.TEST.NUM_WORKERS, os.cpu_count()))

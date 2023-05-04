@@ -220,7 +220,7 @@ def sort_by_dirichlet(alpha_dirichlet, samples):
     N = len(samples)
     samples_sorted = []
     class_labels = np.array([val[1] for val in samples])
-    num_classes = np.max(class_labels) + 1
+    num_classes = int(np.max(class_labels) + 1)
     dirichlet_numchunks = num_classes
 
     # https://github.com/IBM/probabilistic-federated-neural-matching/blob/f44cf4281944fae46cdce1b8bc7cde3e7c44bd70/experiment.py

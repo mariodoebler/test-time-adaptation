@@ -310,7 +310,7 @@ def split_up_model(model, arch_name, dataset_name):
     :param dataset_name: name of the dataset
     :return: encoder and classifier
     """
-    if hasattr(model.model, model.model.pretrained_cfg["classifier"]):
+    if hasattr(model, "model") and hasattr(model.model, "pretrained_cfg") and hasattr(model.model, model.model.pretrained_cfg["classifier"]):
         # split up models loaded from timm
         classifier = deepcopy(getattr(model.model, model.model.pretrained_cfg["classifier"]))
         encoder = model

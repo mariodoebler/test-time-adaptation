@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 def evaluate(description):
     load_cfg_fom_args(description)
     assert cfg.SETTING in ["reset_each_shift",           # reset the model state after the adaptation to a domain
-                           "continual",                  # train on sequence of domain shifts without knowing when shift occurs
+                           "continual",                  # train on sequence of domain shifts without knowing when a shift occurs
                            "gradual",                    # sequence of gradually increasing / decreasing domain shifts
                            "mixed_domains",              # consecutive test samples are likely to originate from different domains
                            "correlated",                 # sorted by class label
@@ -147,7 +147,7 @@ def evaluate(description):
 
     if "mixed_domains" in cfg.SETTING:
         # print detailed results for each domain
-        eval_domain_dict(domain_dict, domain_seq=cfg.CORRUPTION.TYPE)
+        eval_domain_dict(domain_dict, domain_seq=dom_names_all)
 
 
 def setup_source(model):

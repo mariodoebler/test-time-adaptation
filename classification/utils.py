@@ -36,6 +36,7 @@ def eval_domain_dict(domain_dict, domain_seq=None):
     """
     correct = []
     num_samples = []
+    avg_error_domains = []
     dom_names = domain_seq if all([dname in domain_seq for dname in domain_dict.keys()]) else domain_dict.keys()
     logger.info(f"Splitting up the results by domain...")
     for key in dom_names:
@@ -44,9 +45,11 @@ def eval_domain_dict(domain_dict, domain_seq=None):
         num_samples.append(content.shape[0])
         accuracy = correct[-1] / num_samples[-1]
         error = 1 - accuracy
+        avg_error_domains.append(error)
         logger.info(f"{key:<20} error: {error:.2%}")
-    avg_err = 1 - sum(correct) / sum(num_samples)
-    logger.info(f"Average error: {avg_err:.2%}")
+    total_err = 1 - sum(correct) / sum(num_samples)
+    logger.info(f"Average error over domains: {sum(avg_error_domains) / len(avg_error_domains):.2%}")
+    logger.info(f"Error over all samples: {total_err:.2%}")
 
 
 def get_accuracy(model: torch.nn.Module,

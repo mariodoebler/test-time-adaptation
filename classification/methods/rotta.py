@@ -109,6 +109,8 @@ class RoTTA(TTAMethod):
         for name, sub_module in model.named_modules():
             if isinstance(sub_module, nn.BatchNorm1d) or isinstance(sub_module, nn.BatchNorm2d):
                 normlayer_names.append(name)
+            elif isinstance(sub_module, (nn.LayerNorm, nn.GroupNorm)):
+                sub_module.requires_grad_(True)
 
         for name in normlayer_names:
             bn_layer = get_named_submodule(model, name)

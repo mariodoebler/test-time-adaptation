@@ -50,21 +50,21 @@ class CoTTA(TTAMethod):
         imgs_test = x[0]
         outputs = self.model(imgs_test)
 
-        # Create the prediction of the anchor (source) model and the teacher model
+        # Create the prediction of the anchor (source) model
         anchor_prob = torch.nn.functional.softmax(self.model_anchor(imgs_test), dim=1).max(1)[0]
-        standard_ema = self.model_ema(imgs_test)
 
         # Augmentation-averaged Prediction
         outputs_emas = []
         if anchor_prob.mean(0) < self.ap:
-            for i in range(self.n_augmentations):
+            for _ in range(self.n_augmentations):
                 outputs_ = self.model_ema(self.transform(imgs_test)).detach()
                 outputs_emas.append(outputs_)
 
             # Threshold choice discussed in supplementary
             outputs_ema = torch.stack(outputs_emas).mean(0)
         else:
-            outputs_ema = standard_ema
+            # Create the prediction of the teacher model
+            outputs_ema = self.model_ema(imgs_test)
 
         # Student update
         loss = (self.softmax_entropy(outputs, outputs_ema)).mean(0) 

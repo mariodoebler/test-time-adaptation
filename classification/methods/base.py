@@ -1,9 +1,13 @@
+import logging
 import torch
 import torch.nn as nn
 from torch.nn.utils.weight_norm import WeightNorm
 
 from copy import deepcopy
 from models.model import ResNetDomainNet126
+
+
+logger = logging.getLogger(__name__)
 
 
 class TTAMethod(nn.Module):
@@ -14,6 +18,7 @@ class TTAMethod(nn.Module):
         self.steps = steps
         assert steps > 0, "requires >= 1 step(s) to forward and update"
         self.episodic = episodic
+        self.print_amount_trainable_params()
 
         # variables needed for single sample test-time adaptation (sstta) using a sliding window (buffer) approach
         self.input_buffer = None
@@ -104,6 +109,11 @@ class TTAMethod(nn.Module):
         for model, model_state in zip(self.models, self.model_states):
             model.load_state_dict(model_state, strict=True)
         self.optimizer.load_state_dict(self.optimizer_state)
+
+    def print_amount_trainable_params(self):
+        trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in self.model.parameters())
+        logger.info(f"#Trainable/total parameters: {trainable}/{total} \t Fraction: {trainable / total * 100:.2f}% ")
 
     @staticmethod
     def copy_model(model):

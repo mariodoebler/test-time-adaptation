@@ -163,6 +163,7 @@ def setup_test_norm(model):
     no running average or other cross-batch estimation is used.
     """
     model.eval()
+    self.model.requires_grad_(False)
     for m in model.modules():
         # Re-activate batchnorm layer
         if (isinstance(m, nn.BatchNorm1d) and cfg.TEST.BATCH_SIZE > 1) or isinstance(m, (nn.BatchNorm2d, nn.BatchNorm3d)):

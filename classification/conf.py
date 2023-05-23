@@ -86,9 +86,8 @@ _C.CORRUPTION.TYPE = ['gaussian_noise', 'shot_noise', 'impulse_noise',
                       'elastic_transform', 'pixelate', 'jpeg_compression']
 _C.CORRUPTION.SEVERITY = [5, 4, 3, 2, 1]
 
-# Number of examples to evaluate (10000 for all samples in CIFAR-C)
+# Number of examples to evaluate. If num_ex is changed, each sequence is subsampled to the specified amount
 # For ImageNet-C, RobustBench loads a list containing 5000 samples.
-# If num_ex is larger than 5000 all images (50,000) are loaded and then subsampled to num_ex
 _C.CORRUPTION.NUM_EX = -1
 
 # ------------------------------- Batch norm options ------------------------ #

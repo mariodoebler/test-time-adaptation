@@ -8,23 +8,29 @@ import torch.nn.functional as F
 
 from methods.base import TTAMethod
 from models.style_transfer import TransferNet
+from datasets.data_loading import get_source_loader
 
 logger = logging.getLogger(__name__)
 
 
 class GTTA(TTAMethod):
-    def __init__(self, model, optimizer, steps, episodic, window_length, dataset_name, num_classes, src_loader,
-                 ckpt_dir, ckpt_path, steps_adain, pretrain_steps_adain, style_transfer, lam_mixup):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.num_classes = num_classes
-        self.src_loader = src_loader
+        batch_size_src = cfg.TEST.BATCH_SIZE if cfg.TEST.BATCH_SIZE > 1 else cfg.TEST.WINDOW_LENGTH
+        _, self.src_loader = get_source_loader(dataset_name=cfg.CORRUPTION.DATASET,
+                                               root_dir=cfg.DATA_DIR, adaptation=cfg.MODEL.ADAPTATION,
+                                               batch_size=batch_size_src, ckpt_path=cfg.CKPT_PATH,
+                                               percentage=cfg.SOURCE.PERCENTAGE,
+                                               workers=min(cfg.SOURCE.NUM_WORKERS, os.cpu_count()))
         self.src_loader_iter = iter(self.src_loader)
-        self.steps_adain = steps_adain
-        self.use_style_transfer = style_transfer
-        self.lam = lam_mixup
+        self.steps_adain = cfg.GTTA.STEPS_ADAIN
+        self.use_style_transfer = cfg.GTTA.USE_STYLE_TRANSFER
+        self.lam = cfg.GTTA.LAMBDA_MIXUP
         self.buffer_size = 100000
         self.counter = 0
+        ckpt_dir = cfg.CKPT_DIR
+        ckpt_path = cfg.CKPT_PATH
 
         self.avg_conf = torch.tensor(0.9).cuda()
         self.ignore_label = -1
@@ -35,7 +41,7 @@ class GTTA(TTAMethod):
             self.adain_model = TransferNet(ckpt_path_vgg=os.path.join(ckpt_dir, "adain", "vgg_normalized.pth"),
                                            ckpt_path_dec=fname,
                                            data_loader=self.src_loader,
-                                           num_iters_pretrain=pretrain_steps_adain).cuda()
+                                           num_iters_pretrain=cfg.GTTA.PRETRAIN_STEPS_ADAIN).cuda()
             self.moments_list = [[torch.tensor([], device="cuda"), torch.tensor([], device="cuda")] for _ in range(2)]
             self.models = [self.model, self.adain_model]
         else:
@@ -154,15 +160,13 @@ class GTTA(TTAMethod):
         super().reset()
         self.moments_list = [[torch.tensor([], device="cuda"), torch.tensor([], device="cuda")] for _ in range(2)]
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model."""
-        # train mode, because tent optimizes the model to minimize entropy
-        model.train()
+        self.model.train()
         # disable grad, to (re-)enable only what we update
-        model.requires_grad_(False)
+        self.model.requires_grad_(False)
         # enable all trainable
-        for m in model.modules():
+        for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.requires_grad_(True)
                 # force use of batch stats in train and eval modes
@@ -171,4 +175,3 @@ class GTTA(TTAMethod):
                 m.running_var = None
             else:
                 m.requires_grad_(True)
-        return model

@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.jit
 import numpy as np
 import logging
-
+import math
 from methods.base import TTAMethod
 
 
@@ -27,11 +27,11 @@ class SAR(TTAMethod):
     """SAR online adapts a model by Sharpness-Aware and Reliable entropy minimization during testing.
     Once SARed, a model adapts itself by updating on every forward.
     """
-    def __init__(self, model, optimizer, steps, episodic, window_length, margin_e0, reset_constant_em=0.2):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.margin_e0 = margin_e0  # margin E_0 for reliable entropy minimization, Eqn. (2)
-        self.reset_constant_em = reset_constant_em  # threshold e_m for model recovery scheme
+        self.margin_e0 = math.log(num_classes) * 0.40  # margin E_0 for reliable entropy minimization, Eqn. (2)
+        self.reset_constant_em = cfg.SAR.RESET_CONSTANT_EM  # threshold e_m for model recovery scheme
         self.ema = None  # to record the moving average of model output entropy, as model recovery criteria
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
@@ -75,8 +75,7 @@ class SAR(TTAMethod):
         self.load_model_and_optimizer()
         self.ema = None
 
-    @staticmethod
-    def collect_params(model):
+    def collect_params(self):
         """Collect the affine scale + shift parameters from norm layers.
         Walk the model's modules and collect all normalization parameters.
         Return the parameters and their names.
@@ -84,7 +83,7 @@ class SAR(TTAMethod):
         """
         params = []
         names = []
-        for nm, m in model.named_modules():
+        for nm, m in self.model.named_modules():
             # skip top layers for adaptation: layer4 for ResNets and blocks9-11 for Vit-Base
             if 'layer4' in nm:
                 continue
@@ -107,15 +106,14 @@ class SAR(TTAMethod):
 
         return params, names
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model for use with SAR."""
-        # model.train()
-        model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
+        # self.model.train()
+        self.model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
         # disable grad, to (re-)enable only what SAR updates
-        model.requires_grad_(False)
+        self.model.requires_grad_(False)
         # configure norm for SAR updates: enable grad + force batch statisics (this only for BN models)
-        for m in model.modules():
+        for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.requires_grad_(True)
                 # force use of batch stats in train and eval modes
@@ -128,22 +126,13 @@ class SAR(TTAMethod):
             # LayerNorm and GroupNorm for ResNet-GN and Vit-LN models
             elif isinstance(m, (nn.LayerNorm, nn.GroupNorm)):
                 m.requires_grad_(True)
-        return model
 
-    @staticmethod
-    def check_model(model):
-        """Check model for compatability with SAR."""
-        is_training = model.training
-        assert is_training, "SAR needs train mode: call model.train()"
-        param_grads = [p.requires_grad for p in model.parameters()]
-        has_any_params = any(param_grads)
-        has_all_params = all(param_grads)
-        assert has_any_params, "SAR needs params to update: " \
-                               "check which require grad"
-        assert not has_all_params, "SAR should not update all params: " \
-                                   "check which require grad"
-        has_norm = any([isinstance(m, (nn.BatchNorm2d, nn.LayerNorm, nn.GroupNorm)) for m in model.modules()])
-        assert has_norm, "SAR needs normalization layer parameters for its optimization"
+    def setup_optimizer(self):
+        if "vit_" in self.cfg.MODEL.ARCH or "swin_" in self.cfg.MODEL.ARCH:
+            logger.info("Overwriting learning rate for transformers, using a learning rate of 0.001.")
+            return SAM(self.params, torch.optim.SGD, lr=0.001, momentum=self.cfg.OPTIM.MOMENTUM)
+        else:
+            return SAM(self.params, torch.optim.SGD, lr=self.cfg.OPTIM.LR, momentum=self.cfg.OPTIM.MOMENTUM)
 
 
 @torch.jit.script

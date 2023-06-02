@@ -1,3 +1,8 @@
+"""
+Builds upon: https://github.com/DequanWang/tent
+Corresponding paper: https://arxiv.org/abs/2006.10726
+"""
+
 import torch.nn as nn
 import torch.jit
 
@@ -6,11 +11,10 @@ from methods.base import TTAMethod
 
 class Tent(TTAMethod):
     """Tent adapts a model by entropy minimization during testing.
-
     Once tented, a model adapts itself by updating on every forward.
     """
-    def __init__(self, model, optimizer, steps, episodic, window_length):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
@@ -25,8 +29,7 @@ class Tent(TTAMethod):
         self.optimizer.zero_grad()
         return outputs
 
-    @staticmethod
-    def collect_params(model):
+    def collect_params(self):
         """Collect the affine scale + shift parameters from batch norms.
 
         Walk the model's modules and collect all batch normalization parameters.
@@ -36,7 +39,7 @@ class Tent(TTAMethod):
         """
         params = []
         names = []
-        for nm, m in model.named_modules():
+        for nm, m in self.model.named_modules():
             if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.LayerNorm, nn.GroupNorm)):
                 for np, p in m.named_parameters():
                     if np in ['weight', 'bias']:  # weight is scale, bias is shift
@@ -44,16 +47,15 @@ class Tent(TTAMethod):
                         names.append(f"{nm}.{np}")
         return params, names
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model for use with tent."""
         # train mode, because tent optimizes the model to minimize entropy
-        # model.train()
-        model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
+        # self.model.train()
+        self.model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
         # disable grad, to (re-)enable only what tent updates
-        model.requires_grad_(False)
+        self.model.requires_grad_(False)
         # configure norm for tent updates: enable grad + force batch statisics
-        for m in model.modules():
+        for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.requires_grad_(True)
                 # force use of batch stats in train and eval modes
@@ -65,23 +67,6 @@ class Tent(TTAMethod):
                 m.requires_grad_(True)
             elif isinstance(m, (nn.LayerNorm, nn.GroupNorm)):
                 m.requires_grad_(True)
-
-        return model
-
-    @staticmethod
-    def check_model(model):
-        """Check model for compatability with tent."""
-        is_training = model.training
-        assert is_training, "tent needs train mode: call model.train()"
-        param_grads = [p.requires_grad for p in model.parameters()]
-        has_any_params = any(param_grads)
-        has_all_params = all(param_grads)
-        assert has_any_params, "tent needs params to update: " \
-                            "check which require grad"
-        assert not has_all_params, "tent should not update all params: " \
-                                "check which require grad"
-        has_bn = any([isinstance(m, nn.BatchNorm2d) for m in model.modules()])
-        assert has_bn, "tent needs normalization for its optimization"
 
 
 @torch.jit.script

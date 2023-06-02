@@ -11,18 +11,25 @@ logger = logging.getLogger(__name__)
 
 
 class TTAMethod(nn.Module):
-    def __init__(self, model, optimizer, steps=1, episodic=False, window_length=1):
+    def __init__(self, cfg, model, num_classes):
         super().__init__()
+        self.cfg = cfg
         self.model = model
-        self.optimizer = optimizer
-        self.steps = steps
-        assert steps > 0, "requires >= 1 step(s) to forward and update"
-        self.episodic = episodic
+        self.num_classes = num_classes
+        self.episodic = cfg.MODEL.EPISODIC
+        self.dataset_name = cfg.CORRUPTION.DATASET
+        self.steps = cfg.OPTIM.STEPS
+        assert self.steps > 0, "requires >= 1 step(s) to forward and update"
+
+        # configure model and optimizer
+        self.configure_model()
+        self.params, param_names = self.collect_params()
+        self.optimizer = self.setup_optimizer() if len(self.params) > 0 else None
         self.print_amount_trainable_params()
 
         # variables needed for single sample test-time adaptation (sstta) using a sliding window (buffer) approach
         self.input_buffer = None
-        self.window_length = window_length
+        self.window_length = cfg.TEST.WINDOW_LENGTH
         self.pointer = torch.tensor([0], dtype=torch.long).cuda()
         # sstta: if the model has no batchnorm layers, we do not need to forward the whole buffer when not performing any updates
         self.has_bn = any([isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)) for m in model.modules()])
@@ -93,9 +100,48 @@ class TTAMethod(nn.Module):
         imgs_test = x[0]
         return self.model(imgs_test)
 
+    def configure_model(self):
+        raise NotImplementedError
+
+    def collect_params(self):
+        """Collect all trainable parameters.
+        Walk the model's modules and collect all parameters.
+        Return the parameters and their names.
+        Note: other choices of parameterization are possible!
+        """
+        params = []
+        names = []
+        for nm, m in self.model.named_modules():
+            for np, p in m.named_parameters():
+                if np in ['weight', 'bias'] and p.requires_grad:
+                    params.append(p)
+                    names.append(f"{nm}.{np}")
+        return params, names
+
+    def setup_optimizer(self):
+        if self.cfg.OPTIM.METHOD == 'Adam':
+            return torch.optim.Adam(self.params,
+                                    lr=self.cfg.OPTIM.LR,
+                                    betas=(self.cfg.OPTIM.BETA, 0.999),
+                                    weight_decay=self.cfg.OPTIM.WD)
+        elif self.cfg.OPTIM.METHOD == 'SGD':
+            return torch.optim.SGD(self.params,
+                                   lr=self.cfg.OPTIM.LR,
+                                   momentum=self.cfg.OPTIM.MOMENTUM,
+                                   dampening=self.cfg.OPTIM.DAMPENING,
+                                   weight_decay=self.cfg.OPTIM.WD,
+                                   nesterov=self.cfg.OPTIM.NESTEROV)
+        else:
+            raise NotImplementedError
+
+    def print_amount_trainable_params(self):
+        trainable = sum(p.numel() for p in self.params) if len(self.params) > 0 else 0
+        total = sum(p.numel() for p in self.model.parameters())
+        logger.info(f"#Trainable/total parameters: {trainable}/{total} \t Fraction: {trainable / total * 100:.2f}% ")
+
     def reset(self):
         if self.model_states is None or self.optimizer_state is None:
-            raise Exception("cannot reset without saved self.model/optimizer state")
+            raise Exception("cannot reset without saved model/optimizer state")
         self.load_model_and_optimizer()
 
     def copy_model_and_optimizer(self):
@@ -109,11 +155,6 @@ class TTAMethod(nn.Module):
         for model, model_state in zip(self.models, self.model_states):
             model.load_state_dict(model_state, strict=True)
         self.optimizer.load_state_dict(self.optimizer_state)
-
-    def print_amount_trainable_params(self):
-        trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
-        total = sum(p.numel() for p in self.model.parameters())
-        logger.info(f"#Trainable/total parameters: {trainable}/{total} \t Fraction: {trainable / total * 100:.2f}% ")
 
     @staticmethod
     def copy_model(model):
@@ -141,21 +182,3 @@ class TTAMethod(nn.Module):
                         m.train()
                     else:
                         m.eval()
-
-    @staticmethod
-    def collect_params(model):
-        """Collect all trainable parameters.
-
-        Walk the model's modules and collect all parameters.
-        Return the parameters and their names.
-
-        Note: other choices of parameterization are possible!
-        """
-        params = []
-        names = []
-        for nm, m in model.named_modules():
-            for np, p in m.named_parameters():
-                if np in ['weight', 'bias'] and p.requires_grad:
-                    params.append(p)
-                    names.append(f"{nm}.{np}")
-        return params, names

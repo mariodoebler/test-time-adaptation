@@ -2,6 +2,7 @@ import os
 import logging
 import random
 import numpy as np
+import time
 
 import torch
 import torchvision
@@ -223,6 +224,9 @@ def sort_by_dirichlet(alpha_dirichlet, samples):
     num_classes = int(np.max(class_labels) + 1)
     dirichlet_numchunks = num_classes
 
+    time_start = time.time()
+    time_duration = 120  # seconds until program terminates if no solution was found
+
     # https://github.com/IBM/probabilistic-federated-neural-matching/blob/f44cf4281944fae46cdce1b8bc7cde3e7c44bd70/experiment.py
     min_size = -1
     min_size_thresh = 10
@@ -244,6 +248,10 @@ def sort_by_dirichlet(alpha_dirichlet, samples):
             # store class-wise data
             for idx_j, idx in zip(idx_batch_cls, np.split(idx_k, proportions)):
                 idx_j.append(idx)
+
+        # exit loop if no solution was found after a certain while
+        if time.time() > time_start + time_duration:
+            raise ValueError(f"Could not correlated sequence using dirichlet value '{alpha_dirichlet}'. Try other value!")
 
     sequence_stats = []
 

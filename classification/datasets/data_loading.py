@@ -59,10 +59,12 @@ def get_transform(dataset_name, adaptation):
     return transform
 
 
-def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, severity, num_examples, domain_names_all, alpha_dirichlet=0, batch_size=128, shuffle=False, workers=4):
+def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, severity, num_examples,
+                    domain_names_all, rng_seed, alpha_dirichlet=0, batch_size=128, shuffle=False, workers=4):
+
     # Fix seed again to ensure that the test sequence is the same for all methods
-    random.seed(1)
-    np.random.seed(1)
+    random.seed(rng_seed)
+    np.random.seed(rng_seed)
 
     data_dir = complete_data_dir_path(root=root_dir, dataset_name=dataset_name)
     transform = get_transform(dataset_name, adaptation)
@@ -111,6 +113,9 @@ def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, se
             raise ValueError(f"Dataset '{dataset_name}' is not supported!")
 
     try:
+        # shuffle the test sequence; deterministic behavior for a fixed random seed
+        random.shuffle(test_dataset.samples)
+
         # randomly subsample the dataset if num_examples is specified
         if num_examples != -1:
             num_samples_orig = len(test_dataset)
@@ -119,8 +124,7 @@ def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, se
 
         # prepare samples with respect to the considered setting
         if "mixed_domains" in setting:
-            logger.info(f"Mixing the file paths of the following domains: {domain_names_all}")
-            random.shuffle(test_dataset.samples)
+            logger.info(f"Successfully mixed the file paths of the following domains: {domain_names_all}")
 
         if "correlated" in setting:
             # sort the file paths by label
@@ -131,9 +135,6 @@ def get_test_loader(setting, adaptation, dataset_name, root_dir, domain_name, se
                 # sort the class labels by ascending order
                 logger.info(f"Sorting the file paths by class labels...")
                 test_dataset.samples.sort(key=lambda x: x[1])
-        elif dataset_name in {"imagenet_k", "imagenet_r", "imagenet_a", "imagenet_d", "imagenet_d109", "office31", "visda"} or domain_name == "none":
-            # shuffle the data since it is sorted by class
-            random.shuffle(test_dataset.samples)
     except AttributeError:
         logger.warning("Attribute 'samples' is missing. Continuing without shuffling, sorting or subsampling the files...")
 
@@ -183,7 +184,6 @@ def get_source_loader(dataset_name, root_dir, adaptation, batch_size, train_spli
     else:
         raise ValueError("Dataset not supported.")
 
-    # reduce the number of source samples
     if percentage < 1.0 or num_samples:    # reduce the number of source samples
         if dataset_name in {"cifar10", "cifar100"}:
             nr_src_samples = source_dataset.data.shape[0]

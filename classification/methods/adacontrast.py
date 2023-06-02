@@ -7,6 +7,7 @@ import logging
 
 import torch
 import torch.nn as nn
+import torch.optim as optim
 import torch.nn.functional as F
 
 from methods.base import TTAMethod
@@ -140,34 +141,29 @@ class AdaMoCo(nn.Module):
 
 
 class AdaContrast(TTAMethod):
-    def __init__(self, model, optimizer, steps, episodic, dataset_name, arch_name, queue_size, momentum, temperature, contrast_type, ce_type, alpha, beta, eta,
-                 dist_type, ce_sup_type, refine_method, num_neighbors):
-        super().__init__(model.cuda(), optimizer, steps, episodic)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
         # Hyperparameters
-        self.queue_size = queue_size
-        self.m = momentum
-        self.T_moco = temperature
+        self.queue_size = cfg.ADACONTRAST.QUEUE_SIZE
+        self.m = cfg.M_TEACHER.MOMENTUM
+        self.T_moco = cfg.CONTRAST.TEMPERATURE
 
-        self.contrast_type = contrast_type
-        self.ce_type = ce_type
-        self.alpha = alpha
-        self.beta = beta
-        self.eta = eta
+        self.contrast_type = cfg.ADACONTRAST.CONTRAST_TYPE
+        self.ce_type = cfg.ADACONTRAST.CE_TYPE
+        self.alpha = cfg.ADACONTRAST.ALPHA
+        self.beta = cfg.ADACONTRAST.BETA
+        self.eta = cfg.ADACONTRAST.ETA
 
-        self.dist_type = dist_type
-        self.ce_sup_type = ce_sup_type
-        self.refine_method = refine_method
-        self.num_neighbors = num_neighbors
+        self.dist_type = cfg.ADACONTRAST.DIST_TYPE
+        self.ce_sup_type = cfg.ADACONTRAST.CE_SUP_TYPE
+        self.refine_method = cfg.ADACONTRAST.REFINE_METHOD
+        self.num_neighbors = cfg.ADACONTRAST.NUM_NEIGHBORS
 
         self.first_X_samples = 0
 
-        self.optimizer = optimizer
-        self.steps = steps
-        self.episodic = episodic
-
-        if dataset_name != "domainnet126":
-            self.src_model = BaseModel(model, arch_name, dataset_name)
+        if self.dataset_name != "domainnet126":
+            self.src_model = BaseModel(model, cfg.MODEL.ARCH, self.dataset_name)
         else:
             self.src_model = model
 
@@ -191,8 +187,7 @@ class AdaContrast(TTAMethod):
         # note: if the self.model is never reset, like for continual adaptation,
         # then skipping the state copy would save memory
         self.models = [self.src_model, self.momentum_model]
-        self.model_states, self.optimizer_state = \
-            self.copy_model_and_optimizer()
+        self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
 
     def forward(self, x):
         images_test, images_w, images_q, images_k = x
@@ -310,19 +305,70 @@ class AdaContrast(TTAMethod):
             self.banks["probs"][idxs_replace, :] = probs
             self.banks["ptr"] = end % len(self.banks["features"])
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model"""
-        model.train()
+        self.model.train()
         # disable grad, to (re-)enable only what we update
-        model.requires_grad_(False)
+        self.model.requires_grad_(False)
         # enable all trainable
-        for m in model.modules():
+        for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.requires_grad_(True)
             else:
                 m.requires_grad_(True)
-        return model
+
+    def setup_optimizer(self):
+        if self.cfg.CORRUPTION.DATASET == "domainnet126":
+            return setup_adacontrast_optimizer(self.model)
+        elif self.cfg.OPTIM.METHOD == 'Adam':
+            return optim.Adam(self.params,
+                              lr=self.cfg.OPTIM.LR,
+                              betas=(self.cfg.OPTIM.BETA, 0.999),
+                              weight_decay=self.cfg.OPTIM.WD)
+        elif self.cfg.OPTIM.METHOD == 'SGD':
+            return optim.SGD(self.params,
+                             lr=self.cfg.OPTIM.LR,
+                             momentum=self.cfg.OPTIM.MOMENTUM,
+                             dampening=self.cfg.OPTIM.DAMPENING,
+                             weight_decay=self.cfg.OPTIM.WD,
+                             nesterov=self.cfg.OPTIM.NESTEROV)
+        else:
+            raise NotImplementedError
+
+
+def setup_adacontrast_optimizer(model):
+    backbone_params, extra_params = (
+        model.src_model.get_params()
+        if hasattr(model, "src_model")
+        else model.get_params()
+    )
+
+    if cfg.OPTIM.METHOD == "SGD":
+        optimizer = optim.SGD(
+            [
+                {
+                    "params": backbone_params,
+                    "lr": cfg.OPTIM.LR,
+                    "momentum": cfg.OPTIM.MOMENTUM,
+                    "weight_decay": cfg.OPTIM.WD,
+                    "nesterov": cfg.OPTIM.NESTEROV,
+                },
+                {
+                    "params": extra_params,
+                    "lr": cfg.OPTIM.LR * 10,
+                    "momentum": cfg.OPTIM.MOMENTUM,
+                    "weight_decay": cfg.OPTIM.WD,
+                    "nesterov": cfg.OPTIM.NESTEROV,
+                },
+            ]
+        )
+    else:
+        raise NotImplementedError(f"{cfg.OPTIM.METHOD} not implemented.")
+
+    for param_group in optimizer.param_groups:
+        param_group["lr0"] = param_group["lr"]  # snapshot of the initial lr
+
+    return optimizer
 
 
 @torch.no_grad()

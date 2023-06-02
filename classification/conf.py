@@ -61,7 +61,10 @@ _C.DESC = ""
 # ----------------------------- Model options ------------------------------- #
 _C.MODEL = CfgNode()
 
-# Check https://github.com/RobustBench/robustbench or https://pytorch.org/vision/0.14/models.html for available models
+# Some of the available models can be found here:
+# Torchvision: https://pytorch.org/vision/0.14/models.html
+# timm: https://github.com/huggingface/pytorch-image-models/tree/v0.6.13
+# RobustBench: https://github.com/RobustBench/robustbench
 _C.MODEL.ARCH = 'Standard'
 
 # Type of pre-trained weights for torchvision models. See: https://pytorch.org/vision/0.14/models.html
@@ -217,6 +220,16 @@ _C.ROTTA.ALPHA = 0.05
 _C.ROTTA.LAMBDA_T = 1.0
 _C.ROTTA.LAMBDA_U = 1.0
 
+# --------------------------------- ROID options ---------------------------- #
+_C.ROID = CfgNode()
+
+_C.ROID.USE_WEIGHTING = True
+_C.ROID.USE_PRIOR_CORRECTION = True
+_C.ROID.USE_CONSISTENCY = True
+_C.ROID.MOMENTUM_SRC = 0.99     # Momentum for weight ensembling
+_C.ROID.MOMENTUM_PROBS = 0.9    # Momentum for diversity weighting
+_C.ROID.TEMPERATURE = 1/3
+
 # ------------------------------- Source options ---------------------------- #
 _C.SOURCE = CfgNode()
 
@@ -348,7 +361,7 @@ def complete_data_dir_path(root, dataset_name):
                "imagenet_r": "imagenet-r",
                "imagenet_k": os.path.join("ImageNet-Sketch", "sketch"),
                "imagenet_a": "imagenet-a",
-               "imagenet_d": "imagenet-d",  # do not change
+               "imagenet_d": "imagenet-d",      # do not change
                "imagenet_d109": "imagenet-d",   # do not change
                "domainnet126": "DomainNet-126", # directory containing the 6 splits of "cleaned versions" from http://ai.bu.edu/M3SDA/#dataset
                "office31": "office-31",
@@ -379,3 +392,26 @@ def get_domain_sequence(ckpt_path):
                "sketch": ["painting", "clipart", "real"],
                }
     return mapping[domain]
+
+
+def adaptation_method_lookup(adaptation):
+    lookup_table = {"source": "Norm",
+                    "norm_test": "Norm",
+                    "norm_alpha": "Norm",
+                    "norm_ema": "Norm",
+                    "ttaug": "TTAug",
+                    "memo": "MEMO",
+                    "lame": "LAME",
+                    "tent": "Tent",
+                    "eata": "EATA",
+                    "sar": "SAR",
+                    "adacontrast": "AdaContrast",
+                    "cotta": "CoTTA",
+                    "rotta": "RoTTA",
+                    "gtta": "GTTA",
+                    "rmt": "RMT",
+                    "roid": "ROID"
+                    }
+    assert adaptation in lookup_table.keys(), \
+        f"Adaptation method '{adaptation}' is not supported! Choose from: {list(lookup_table.keys())}"
+    return lookup_table[adaptation]

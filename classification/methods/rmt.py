@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from methods.base import TTAMethod
 from models.model import split_up_model
 from augmentations.transforms_cotta import get_tta_transforms
+from datasets.data_loading import get_source_loader
 
 
 logger = logging.getLogger(__name__)
@@ -22,26 +23,29 @@ def update_ema_variables(ema_model, model, alpha_teacher):
 
 
 class RMT(TTAMethod):
-    def __init__(self, model, optimizer, steps, episodic, window_length, dataset_name, arch_name, num_classes, src_loader, ckpt_dir, ckpt_path,
-                 contrast_mode, temperature, projection_dim, lambda_ce_src, lambda_ce_trg, lambda_cont, m_teacher_momentum, num_samples_warm_up):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.dataset_name = dataset_name
-        self.num_classes = num_classes
-        self.src_loader = src_loader
+        batch_size_src = cfg.TEST.BATCH_SIZE if cfg.TEST.BATCH_SIZE > 1 else cfg.TEST.WINDOW_LENGTH
+        _, self.src_loader = get_source_loader(dataset_name=cfg.CORRUPTION.DATASET,
+                                               root_dir=cfg.DATA_DIR, adaptation=cfg.MODEL.ADAPTATION,
+                                               batch_size=batch_size_src, ckpt_path=cfg.CKPT_PATH,
+                                               percentage=cfg.SOURCE.PERCENTAGE,
+                                               workers=min(cfg.SOURCE.NUM_WORKERS, os.cpu_count()))
         self.src_loader_iter = iter(self.src_loader)
-
-        self.contrast_mode = contrast_mode
-        self.temperature = temperature
+        self.contrast_mode = cfg.CONTRAST.MODE
+        self.temperature = cfg.CONTRAST.TEMPERATURE
         self.base_temperature = self.temperature
-        self.projection_dim = projection_dim
-        self.lambda_ce_src = lambda_ce_src
-        self.lambda_ce_trg = lambda_ce_trg
-        self.lambda_cont = lambda_cont
-        self.m_teacher_momentum = m_teacher_momentum
+        self.projection_dim = cfg.CONTRAST.PROJECTION_DIM
+        self.lambda_ce_src = cfg.RMT.LAMBDA_CE_SRC
+        self.lambda_ce_trg = cfg.RMT.LAMBDA_CE_TRG
+        self.lambda_cont = cfg.RMT.LAMBDA_CONT
+        self.m_teacher_momentum = cfg.M_TEACHER.MOMENTUM
         # arguments neeeded for warm up
-        self.warmup_steps = num_samples_warm_up // self.src_loader.batch_size
-        self.final_lr = self.optimizer.param_groups[0]["lr"]
+        self.warmup_steps = cfg.RMT.NUM_SAMPLES_WARM_UP // batch_size_src
+        self.final_lr = cfg.OPTIM.LR
+        arch_name = cfg.MODEL.ARCH
+        ckpt_path = cfg.CKPT_PATH
 
         self.tta_transform = get_tta_transforms(self.dataset_name)
 
@@ -51,10 +55,10 @@ class RMT(TTAMethod):
             param.detach_()
 
         # split up the model
-        self.feature_extractor, self.classifier = split_up_model(model, arch_name, self.dataset_name)
+        self.feature_extractor, self.classifier = split_up_model(self.model, arch_name, self.dataset_name)
 
         # define the prototype paths
-        proto_dir_path = os.path.join(ckpt_dir, "prototypes")
+        proto_dir_path = os.path.join(cfg.CKPT_DIR, "prototypes")
         if self.dataset_name == "domainnet126":
             fname = f"protos_{self.dataset_name}_{ckpt_path.split(os.sep)[-1].split('_')[1]}.pth"
         else:
@@ -102,7 +106,7 @@ class RMT(TTAMethod):
 
         # warm up the mean-teacher framework
         if self.warmup_steps > 0:
-            warmup_ckpt_path = os.path.join(ckpt_dir, "warmup")
+            warmup_ckpt_path = os.path.join(cfg.CKPT_DIR, "warmup")
             if self.dataset_name == "domainnet126":
                 source_domain = ckpt_path.split(os.sep)[-1].split('_')[1]
                 ckpt_path = f"ckpt_warmup_{self.dataset_name}_{source_domain}_{arch_name}_bs{self.src_loader.batch_size}.pth"
@@ -291,15 +295,14 @@ class RMT(TTAMethod):
         outputs_ema = self.model_ema(imgs_test)
         return outputs_test + outputs_ema
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model"""
         # model.train()
-        model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
+        self.model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
         # disable grad, to (re-)enable only what we update
-        model.requires_grad_(False)
+        self.model.requires_grad_(False)
         # enable all trainable
-        for m in model.modules():
+        for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.requires_grad_(True)
                 # force use of batch stats in train and eval modes
@@ -311,7 +314,6 @@ class RMT(TTAMethod):
                 m.requires_grad_(True)
             else:
                 m.requires_grad_(True)
-        return model
 
 
 @torch.jit.script

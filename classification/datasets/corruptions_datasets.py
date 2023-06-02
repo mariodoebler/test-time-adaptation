@@ -58,26 +58,31 @@ def create_imagenetc_dataset(
     transform=None,
     setting: str = 'continual'):
 
-    # load imagenet class to id mapping from robustbench
-    with open(os.path.join("robustbench", "data", "imagenet_class_to_id_map.json"), 'r') as f:
-        class_to_idx = json.load(f)
-
     # create the dataset which loads the default test list from robust bench containing 5000 test samples
     corruptions_seq = corruptions_seq if "mixed_domains" in setting else [corruption]
     corruption_dir_path = os.path.join(data_dir, corruptions_seq[0], str(severity))
     dataset_test = CustomImageFolder(corruption_dir_path, transform)
 
-    if "mixed_domains" in setting:
+    if "mixed_domains" in setting or "correlated" in setting or n_examples != -1:
+        # load imagenet class to id mapping from robustbench
+        with open(os.path.join("robustbench", "data", "imagenet_class_to_id_map.json"), 'r') as f:
+            class_to_idx = json.load(f)
+
+        if n_examples != -1 or "correlated" in setting:
+            # load test list containing all 50k image ids
+            filename = os.path.join("datasets", "imagenet_list", "imagenet_val_ids_50k.txt")
+        else:
+            # load default test list from robustbench
+            filename = os.path.join("robustbench", "data", "imagenet_test_image_ids.txt")
+
+        # load file containing file ids
+        with open(filename, 'r') as f:
+            fnames = f.readlines()
+
         files = []
         for cor in corruptions_seq:
             corruption_dir_path = os.path.join(data_dir, cor, str(severity))
-            file_paths = glob(os.path.join(corruption_dir_path, "*", "*.JPEG"))
-            files += [(fp, class_to_idx[fp[len(str(corruption_dir_path))+1:].split(os.sep)[0]]) for fp in file_paths]
-        dataset_test.samples = files
-    elif setting == "correlated" or n_examples != -1:
-        # get all test samples of the specified corruption
-        file_paths = glob(os.path.join(str(corruption_dir_path), "*", "*.JPEG"))
-        files = [(fp, class_to_idx[fp[len(str(corruption_dir_path))+1:].split(os.sep)[0]]) for fp in file_paths]
+            files += [(os.path.join(corruption_dir_path, fn.split('\n')[0]), class_to_idx[fn.split(os.sep)[0]]) for fn in fnames]
         dataset_test.samples = files
 
     return dataset_test

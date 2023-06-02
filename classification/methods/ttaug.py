@@ -2,7 +2,6 @@ import numpy as np
 from PIL import Image
 
 import torch
-
 from copy import deepcopy
 from methods.base import TTAMethod
 from augmentations.transforms_memo_cifar import aug_cifar
@@ -18,13 +17,12 @@ def tta(image, n_augmentations, aug):
 
 
 class TTAug(TTAMethod):
-    """Test-time augmentation
-    """
-    def __init__(self, model, optimizer, steps, episodic, n_augmentations, dataset_name):
-        super().__init__(model.cuda(), optimizer, steps, episodic)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.n_augmentations = n_augmentations
-        self.augmentations = aug_cifar if "cifar" in dataset_name else aug_imagenet
+        self.alpha_bn = cfg.BN.ALPHA
+        self.n_augmentations = cfg.TEST.N_AUGMENTATIONS
+        self.augmentations = aug_cifar if "cifar" in self.dataset_name else aug_imagenet
         self.model_state, _ = self.copy_model_and_optimizer()
 
     @torch.no_grad()
@@ -44,3 +42,7 @@ class TTAug(TTAMethod):
 
     def reset(self):
         self.model.load_state_dict(self.model_state, strict=True)
+
+    def configure_model(self):
+        self.model = AlphaBatchNorm.adapt_model(self.model, alpha=self.alpha_bn)
+        self.model.requires_grad_(False)

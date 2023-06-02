@@ -17,16 +17,14 @@ logger = logging.getLogger(__name__)
 class LAME(TTAMethod):
     """ Parameter-free Online Test-time Adaptation
     """
-    def __init__(self, model, optimizer, steps, episodic, window_length, dataset_name, arch_name, affinity="rbf", knn=5, sigma=1.0, force_symmetry=False):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.knn = knn
-        self.sigma = sigma
-        self.affinity = eval(f'{affinity}_affinity')(sigma=self.sigma, knn=self.knn)
-        self.force_symmetry = force_symmetry
+        self.affinity = eval(f'{cfg.LAME.AFFINITY}_affinity')(sigma=cfg.LAME.SIGMA, knn=cfg.LAME.KNN)
+        self.force_symmetry = cfg.LAME.FORCE_SYMMETRY
 
         # split up the model
-        self.feature_extractor, self.classifier = split_up_model(model, arch_name, dataset_name)
+        self.feature_extractor, self.classifier = split_up_model(self.model, cfg.MODEL.ARCH, self.dataset_name)
         self.model_state, _ = self.copy_model_and_optimizer()
 
     @torch.no_grad()  # ensure grads in possible no grad context for testing
@@ -49,13 +47,11 @@ class LAME(TTAMethod):
 
         return outputs
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model"""
-        model.eval()
+        self.model.eval()
         # disable grad, to (re-)enable only what we update
-        model.requires_grad_(False)
-        return model
+        self.model.requires_grad_(False)
 
     def copy_model_and_optimizer(self):
         """Copy the model and optimizer states for resetting after adaptation."""

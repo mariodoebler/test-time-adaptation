@@ -18,15 +18,13 @@ def update_ema_variables(ema_model, model, alpha_teacher):
 
 
 class CoTTA(TTAMethod):
-    """CoTTA
-    """
-    def __init__(self, model, optimizer, steps, episodic, window_length, dataset_name, mt_alpha=0.999, rst_m=0.01, ap=0.9, n_augmentations=32):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.mt = mt_alpha
-        self.rst = rst_m
-        self.ap = ap
-        self.n_augmentations = n_augmentations
+        self.mt = cfg.M_TEACHER.MOMENTUM
+        self.rst = cfg.COTTA.RST
+        self.ap = cfg.COTTA.AP
+        self.n_augmentations = cfg.TEST.N_AUGMENTATIONS
 
         # Setup EMA and anchor/source model
         self.model_ema = self.copy_model(self.model)
@@ -42,8 +40,8 @@ class CoTTA(TTAMethod):
         self.models = [self.model, self.model_ema, self.model_anchor]
         self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
 
-        self.softmax_entropy = softmax_entropy_cifar if "cifar" in dataset_name else softmax_entropy_imagenet
-        self.transform = get_tta_transforms(dataset_name)
+        self.softmax_entropy = softmax_entropy_cifar if "cifar" in self.dataset_name else softmax_entropy_imagenet
+        self.transform = get_tta_transforms(self.dataset_name)
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
@@ -95,15 +93,14 @@ class CoTTA(TTAMethod):
         imgs_test = x[0]
         return self.model_ema(imgs_test)
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model."""
-        # model.train()
-        model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
+        # self.model.train()
+        self.model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
         # disable grad, to (re-)enable only what we update
-        model.requires_grad_(False)
+        self.model.requires_grad_(False)
         # enable all trainable
-        for m in model.modules():
+        for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.requires_grad_(True)
                 # force use of batch stats in train and eval modes
@@ -115,7 +112,6 @@ class CoTTA(TTAMethod):
                 m.requires_grad_(True)
             else:
                 m.requires_grad_(True)
-        return model
 
 
 @torch.jit.script

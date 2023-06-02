@@ -23,13 +23,12 @@ def tta(image, n_augmentations, aug):
 
 
 class MEMO(TTAMethod):
-    """MEMO
-    """
-    def __init__(self, model, optimizer, steps, episodic, n_augmentations, dataset_name):
-        super().__init__(model.cuda(), optimizer, steps, episodic)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.n_augmentations = n_augmentations
-        self.augmentations = aug_cifar if "cifar" in dataset_name else aug_imagenet
+        self.alpha_bn = cfg.BN.ALPHA
+        self.n_augmentations = cfg.TEST.N_AUGMENTATIONS
+        self.augmentations = aug_cifar if "cifar" in self.dataset_name else aug_imagenet
 
     def forward(self, x):
         if self.episodic:
@@ -52,6 +51,9 @@ class MEMO(TTAMethod):
         loss.backward()
         self.optimizer.step()
         return outputs
+
+    def configure_model(self):
+        self.model = AlphaBatchNorm.adapt_model(self.model, alpha=self.alpha_bn)
 
 
 def marginal_entropy(outputs):

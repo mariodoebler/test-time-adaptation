@@ -1,35 +1,68 @@
 """
 Builds upon: https://github.com/mr-eggplant/EATA
-Copyright to EATA ICML 2022 Authors, 2022.03.20
-Based on Tent ICLR 2021 Spotlight.
+Corresponding paper: https://arxiv.org/abs/2204.02610
 """
+
+import math
+import logging
 
 import torch
 import torch.nn as nn
 import torch.jit
-
-import math
 import torch.nn.functional as F
 
 from methods.base import TTAMethod
+from datasets.data_loading import get_source_loader
+
+logger = logging.getLogger(__name__)
 
 
 class EATA(TTAMethod):
     """EATA adapts a model by entropy minimization during testing.
     Once EATAed, a model adapts itself by updating on every forward.
     """
-    def __init__(self, model, optimizer, steps, episodic, window_length, fishers=None, fisher_alpha=2000.0, e_margin=math.log(1000)/2-1, d_margin=0.05):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
         self.num_samples_update_1 = 0  # number of samples after First filtering, exclude unreliable samples
         self.num_samples_update_2 = 0  # number of samples after Second filtering, exclude both unreliable and redundant samples
-        self.e_margin = e_margin # hyper-parameter E_0 (Eqn. 3)
-        self.d_margin = d_margin # hyper-parameter \epsilon for consine simlarity thresholding (Eqn. 5)
+        self.e_margin = math.log(self.num_classes) * 0.40   # hyper-parameter E_0 (Eqn. 3)
+        self.d_margin = cfg.EATA.D_MARGIN   # hyperparameter \epsilon for cosine similarity thresholding (Eqn. 5)
 
         self.current_model_probs = None # the moving average of probability vector (Eqn. 4)
+        self.fisher_alpha = cfg.EATA.FISHER_ALPHA # trade-off \beta for two losses (Eqn. 8)
 
-        self.fishers = fishers # fisher regularizer items for anti-forgetting, need to be calculated pre model adaptation (Eqn. 9)
-        self.fisher_alpha = fisher_alpha # trade-off \beta for two losses (Eqn. 8)
+        if self.fisher_alpha > 0.0:
+            # compute fisher informatrix
+            batch_size_src = cfg.TEST.BATCH_SIZE if cfg.TEST.BATCH_SIZE > 1 else cfg.TEST.WINDOW_LENGTH
+            _, fisher_loader = get_source_loader(dataset_name=cfg.CORRUPTION.DATASET,
+                                                 root_dir=cfg.DATA_DIR, adaptation=cfg.MODEL.ADAPTATION,
+                                                 batch_size=batch_size_src, ckpt_path=cfg.CKPT_PATH,
+                                                 num_samples=cfg.EATA.NUM_SAMPLES)
+
+            ewc_optimizer = torch.optim.SGD(self.params, 0.001)
+            self.fishers = {} # fisher regularizer items for anti-forgetting, need to be calculated pre model adaptation (Eqn. 9)
+            train_loss_fn = nn.CrossEntropyLoss().cuda()
+            for iter_, batch in enumerate(fisher_loader, start=1):
+                images = batch[0].cuda(non_blocking=True)
+                outputs = self.model(images)
+                _, targets = outputs.max(1)
+                loss = train_loss_fn(outputs, targets)
+                loss.backward()
+                for name, param in model.named_parameters():
+                    if param.grad is not None:
+                        if iter_ > 1:
+                            fisher = param.grad.data.clone().detach() ** 2 + self.fishers[name][0]
+                        else:
+                            fisher = param.grad.data.clone().detach() ** 2
+                        if iter_ == len(fisher_loader):
+                            fisher = fisher / iter_
+                        self.fishers.update({name: [fisher, param.data.clone().detach()]})
+                ewc_optimizer.zero_grad()
+            logger.info("compute fisher matrices finished")
+            del ewc_optimizer
+        else:
+            self.fishers = None
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
@@ -91,8 +124,7 @@ class EATA(TTAMethod):
     def reset_model_probs(self, probs):
         self.current_model_probs = probs
 
-    @staticmethod
-    def collect_params(model):
+    def collect_params(self):
         """Collect the affine scale + shift parameters from batch norms.
         Walk the model's modules and collect all batch normalization parameters.
         Return the parameters and their names.
@@ -100,7 +132,7 @@ class EATA(TTAMethod):
         """
         params = []
         names = []
-        for nm, m in model.named_modules():
+        for nm, m in self.model.named_modules():
             if isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d, nn.LayerNorm, nn.GroupNorm)):
                 for np, p in m.named_parameters():
                     if np in ['weight', 'bias']:  # weight is scale, bias is shift
@@ -108,16 +140,15 @@ class EATA(TTAMethod):
                         names.append(f"{nm}.{np}")
         return params, names
 
-    @staticmethod
-    def configure_model(model):
+    def configure_model(self):
         """Configure model for use with eata."""
         # train mode, because eata optimizes the model to minimize entropy
-        # model.train()
-        model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
+        # self.model.train()
+        self.model.eval()  # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
         # disable grad, to (re-)enable only what eata updates
-        model.requires_grad_(False)
+        self.model.requires_grad_(False)
         # configure norm for eata updates: enable grad + force batch statisics
-        for m in model.modules():
+        for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
                 m.requires_grad_(True)
                 # force use of batch stats in train and eval modes
@@ -129,23 +160,6 @@ class EATA(TTAMethod):
                 m.requires_grad_(True)
             elif isinstance(m, (nn.LayerNorm, nn.GroupNorm)):
                 m.requires_grad_(True)
-
-        return model
-
-    @staticmethod
-    def check_model(model):
-        """Check model for compatability with eata."""
-        is_training = model.training
-        assert is_training, "eata needs train mode: call model.train()"
-        param_grads = [p.requires_grad for p in model.parameters()]
-        has_any_params = any(param_grads)
-        has_all_params = all(param_grads)
-        assert has_any_params, "eata needs params to update: " \
-                            "check which require grad"
-        assert not has_all_params, "eata should not update all params: " \
-                                "check which require grad"
-        has_bn = any([isinstance(m, nn.BatchNorm2d) for m in model.modules()])
-        assert has_bn, "eata needs normalization for its optimization"
 
 
 @torch.jit.script

@@ -10,7 +10,7 @@ from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 
 from copy import deepcopy
-from models import resnet_bit, resnet26, resnet_gn
+from models import resnet26
 from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_D109_MASK
 
 logger = logging.getLogger(__name__)

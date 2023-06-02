@@ -13,15 +13,14 @@ from augmentations.transforms_cotta import get_tta_transforms
 
 
 class RoTTA(TTAMethod):
-    def __init__(self, model, optimizer, steps, episodic, window_length, dataset_name, memory_size, num_classes, lambda_t, lambda_u, nu, update_freq):
-        super().__init__(model.cuda(), optimizer, steps, episodic, window_length)
+    def __init__(self, cfg, model, num_classes):
+        super().__init__(cfg, model, num_classes)
 
-        self.memory_size = memory_size
-        self.num_classes = num_classes
-        self.lambda_t = lambda_t
-        self.lambda_u = lambda_u
-        self.nu = nu
-        self.update_frequency = update_freq  # actually the same as the size of memory bank
+        self.memory_size = cfg.ROTTA.MEMORY_SIZE
+        self.lambda_t = cfg.ROTTA.LAMBDA_T
+        self.lambda_u = cfg.ROTTA.LAMBDA_U
+        self.nu = cfg.ROTTA.NU
+        self.update_frequency = cfg.ROTTA.UPDATE_FREQUENCY  # actually the same as the size of memory bank
         self.current_instance = 0
         self.mem = CSTU(capacity=self.memory_size, num_class=self.num_classes, lambda_t=self.lambda_t, lambda_u=self.lambda_u)
 
@@ -36,7 +35,7 @@ class RoTTA(TTAMethod):
         self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
 
         # create the test-time transformations
-        self.transform = get_tta_transforms(dataset_name)
+        self.transform = get_tta_transforms(self.dataset_name)
 
     @torch.enable_grad()
     def forward_and_adapt(self, x):
@@ -101,19 +100,18 @@ class RoTTA(TTAMethod):
             ema_param.data[:] = (1 - nu) * ema_param[:].data[:] + nu * param[:].data[:]
         return ema_model
 
-    @staticmethod
-    def configure_model(model, alpha):
-        model.requires_grad_(False)
+    def configure_model(self):
+        self.model.requires_grad_(False)
         normlayer_names = []
 
-        for name, sub_module in model.named_modules():
+        for name, sub_module in self.model.named_modules():
             if isinstance(sub_module, nn.BatchNorm1d) or isinstance(sub_module, nn.BatchNorm2d):
                 normlayer_names.append(name)
             elif isinstance(sub_module, (nn.LayerNorm, nn.GroupNorm)):
                 sub_module.requires_grad_(True)
 
         for name in normlayer_names:
-            bn_layer = get_named_submodule(model, name)
+            bn_layer = get_named_submodule(self.model, name)
             if isinstance(bn_layer, nn.BatchNorm1d):
                 NewBN = RobustBN1d
             elif isinstance(bn_layer, nn.BatchNorm2d):
@@ -121,10 +119,9 @@ class RoTTA(TTAMethod):
             else:
                 raise RuntimeError()
 
-            momentum_bn = NewBN(bn_layer, alpha)
+            momentum_bn = NewBN(bn_layer, self.cfg.ROTTA.ALPHA)
             momentum_bn.requires_grad_(True)
-            set_named_submodule(model, name, momentum_bn)
-        return model
+            set_named_submodule(self.model, name, momentum_bn)
 
 
 @torch.jit.script

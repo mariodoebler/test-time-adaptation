@@ -1,9 +1,43 @@
 # Online Test-time Adaptation
 This is an open source online test-time adaptation repository based on PyTorch. It is joint work by Robert A. Marsden and Mario Döbler. It is also the official repository for the following works:
-- [Introducing Intermediate Domains for Effective Self-Training during Test-Time](https://arxiv.org/abs/2208.07736) 
-- [Robust Mean Teacher for Continual and Gradual Test-Time Adaptation](https://arxiv.org/abs/2211.13081) (CVPR2023).
-- [Universal Test-time Adaptation through Weight Ensembling, Diversity Weighting, and Prior Correction](https://arxiv.org/abs/2306.00650).
+- [Introducing Intermediate Domains for Effective Self-Training during Test-Time](https://arxiv.org/abs/2208.07736)
+- [Robust Mean Teacher for Continual and Gradual Test-Time Adaptation](https://arxiv.org/abs/2211.13081) (CVPR2023)
+- [Universal Test-time Adaptation through Weight Ensembling, Diversity Weighting, and Prior Correction](https://arxiv.org/abs/2306.00650)
 
+<details>
+<summary>Cite</summary>
+
+```
+@article{marsden2022gradual,
+  title={Gradual test-time adaptation by self-training and style transfer},
+  author={Marsden, Robert A and D{\"o}bler, Mario and Yang, Bin},
+  journal={arXiv preprint arXiv:2208.07736},
+  year={2022}
+}
+```
+
+```
+@inproceedings{dobler2023robust,
+  title={Robust mean teacher for continual and gradual test-time adaptation},
+  author={D{\"o}bler, Mario and Marsden, Robert A and Yang, Bin},
+  booktitle={Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={7704--7714},
+  year={2023}
+}
+```
+
+```
+@article{marsden2023universal,
+  title={Universal Test-time Adaptation through Weight Ensembling, Diversity Weighting, and Prior Correction},
+  author={Marsden, Robert A and D{\"o}bler, Mario and Yang, Bin},
+  journal={arXiv preprint arXiv:2306.00650},
+  year={2023}
+}
+```
+
+</details>
+
+We encourage contributions! Pull requests to add methods are very welcome and appreciated.
 
 ## Prerequisites
 To use the repository, we provide a conda environment.
@@ -14,6 +48,7 @@ conda activate tta
 ```
 
 ## Classification
+Our benchmark, including the **evaluation protocol** and **results** is located [here](classification/benchmark.md). More information can be found in the [paper](https://arxiv.org/abs/2306.00650).
 
 <details open>
 <summary>Features</summary>
@@ -156,8 +191,8 @@ We provide the different datasets of CarlaTTA as individual zip-files on Google-
 
 If you find our dataset CarlaTTA useful, please cite our work.
 ```
-@article{marsden2022introducing,
-  title={Introducing Intermediate Domains for Effective Self-Training during Test-Time},
+@article{marsden2022gradual,
+  title={Gradual test-time adaptation by self-training and style transfer},
   author={Marsden, Robert A and D{\"o}bler, Mario and Yang, Bin},
   journal={arXiv preprint arXiv:2208.07736},
   year={2022}

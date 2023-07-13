@@ -95,9 +95,13 @@ def evaluate(description):
                                                shuffle=False,
                                                workers=min(cfg.TEST.NUM_WORKERS, os.cpu_count()))
 
-            acc, domain_dict = get_accuracy(
-                model, data_loader=test_data_loader, dataset_name=cfg.CORRUPTION.DATASET,
-                domain_name=domain_name, setting=cfg.SETTING, domain_dict=domain_dict)
+            # evaluate the model
+            acc, domain_dict = get_accuracy(model,
+                                            data_loader=test_data_loader,
+                                            dataset_name=cfg.CORRUPTION.DATASET,
+                                            domain_name=domain_name,
+                                            setting=cfg.SETTING,
+                                            domain_dict=domain_dict)
 
             err = 1. - acc
             errs.append(err)

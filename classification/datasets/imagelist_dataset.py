@@ -25,17 +25,15 @@ class ImageList(Dataset):
             self.samples += self.build_index(label_file=file)
 
     def build_index(self, label_file):
-        # read in items; each item takes one line
-        with open(label_file, "r") as fd:
-            lines = fd.readlines()
-        lines = [line.strip() for line in lines if line]
+        with open(label_file, "r") as file:
+            tmp_items = [line.strip().split() for line in file if line]
 
         item_list = []
-        for item in lines:
-            img_file, label = item.split()
+        for img_file, label in tmp_items:
+            img_file = f"{os.sep}".join(img_file.split("/"))
             img_path = os.path.join(self.image_root, img_file)
-            domain = img_file.split(os.sep)[0]
-            item_list.append((img_path, int(label), domain))
+            domain_name = img_file.split(os.sep)[0]
+            item_list.append((img_path, int(label), domain_name))
 
         return item_list
 

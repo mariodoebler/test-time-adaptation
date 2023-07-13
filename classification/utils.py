@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 def split_results_by_domain(domain_dict, data, predictions):
     """
-    Separates the labels and predictions by domain
+    Separate the labels and predictions by domain
     :param domain_dict: dictionary, where the keys are the domain names and the values are lists with pairs [[label1, prediction1], ...]
     :param data: list containing [images, labels, domains, ...]
     :param predictions: tensor containing the predictions of the model

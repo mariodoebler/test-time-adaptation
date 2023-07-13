@@ -63,8 +63,8 @@ def get_timm_model(model_name):
     """
     # check if the defined model name is supported as pre-trained model
     available_models = timm.list_models(pretrained=True)
-    if not model_name in available_models:
-        raise ValueError(f"Model '{model_name}' is not available. Choose from: {available_models}")
+    if model_name not in available_models:
+        raise ValueError(f"Model '{model_name}' is not available in timm. Choose from: {available_models}")
 
     # setup pre-trained model
     model = timm.create_model(model_name, pretrained=True)
@@ -73,7 +73,8 @@ def get_timm_model(model_name):
     # add the corresponding input normalization to the model
     if hasattr(model, "pretrained_cfg"):
         logger.info(f"General model information: {model.pretrained_cfg}")
-        logger.info(f"Adding input normalization to the model using: mean={model.pretrained_cfg['mean']} \t std={model.pretrained_cfg['std']}")
+        logger.info(f"Adding input normalization to the model using:"
+                    f" mean={model.pretrained_cfg['mean']} \t std={model.pretrained_cfg['std']}")
         model = normalize_model(model, mean=model.pretrained_cfg["mean"], std=model.pretrained_cfg["std"])
     else:
         raise AttributeError(f"Attribute 'pretrained_cfg' is missing for model '{model_name}' from timm."

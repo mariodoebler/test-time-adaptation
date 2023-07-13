@@ -47,9 +47,9 @@ def eval_domain_dict(domain_dict, domain_seq=None):
         error = 1 - accuracy
         avg_error_domains.append(error)
         logger.info(f"{key:<20} error: {error:.2%}")
-    total_err = 1 - sum(correct) / sum(num_samples)
     logger.info(f"Average error across all domains: {sum(avg_error_domains) / len(avg_error_domains):.2%}")
-    logger.info(f"Error over all samples: {total_err:.2%}")
+    # The error across all samples differs if each domain contains different amounts of samples
+    logger.info(f"Error over all samples: {1 - sum(correct) / sum(num_samples):.2%}")
 
 
 def get_accuracy(model: torch.nn.Module,

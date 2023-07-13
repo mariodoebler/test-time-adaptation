@@ -9,21 +9,21 @@ logger = logging.getLogger(__name__)
 
 def split_results_by_domain(domain_dict, data, predictions):
     """
-    Create a dictionary which separates the labels and predictions by domain
-    :param domain_dict: dictionary, where the keys are the domains and the content is [labels, predictions]
+    Separates the labels and predictions by domain
+    :param domain_dict: dictionary, where the keys are the domain names and the values are lists with pairs [[label1, prediction1], ...]
     :param data: list containing [images, labels, domains, ...]
-    :param predictions: predictions of the model
+    :param predictions: tensor containing the predictions of the model
     :return: updated result dict
     """
 
-    imgs = data[0][0] if isinstance(data[0], list) else data[0]
+    labels, domains = data[1], data[2]
+    assert predictions.shape[0] == labels.shape[0], "The batch size of predictions and labels does not match!"
 
-    for i in range(imgs.shape[0]):
-        label, domain = data[1][i], data[2][i]
-        if domain in domain_dict.keys():
-            domain_dict[domain].append([label.item(), predictions[i].item()])
+    for i in range(labels.shape[0]):
+        if domains[i] in domain_dict.keys():
+            domain_dict[domains[i]].append([labels[i].item(), predictions[i].item()])
         else:
-            domain_dict[domain] = [[label.item(), predictions[i].item()]]
+            domain_dict[domains[i]] = [[labels[i].item(), predictions[i].item()]]
 
     return domain_dict
 

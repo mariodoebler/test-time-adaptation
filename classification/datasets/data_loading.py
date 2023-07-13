@@ -10,7 +10,7 @@ import torchvision.transforms as transforms
 
 from conf import complete_data_dir_path
 from datasets.imagelist_dataset import ImageList
-from datasets.imagenet_subsets import create_imagenet_subset, class_mapping_164_to_109
+from datasets.imagenet_subsets import create_imagenet_subset
 from datasets.corruptions_datasets import create_cifarc_dataset, create_imagenetc_dataset
 from datasets.imagenet_d_utils import create_symlinks_and_get_imagenet_visda_mapping
 from datasets.imagenet_dict import map_dict

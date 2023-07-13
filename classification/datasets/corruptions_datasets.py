@@ -69,20 +69,20 @@ def create_imagenetc_dataset(
             class_to_idx = json.load(f)
 
         if n_examples != -1 or "correlated" in setting:
-            # load test list containing all 50k image ids
-            filename = os.path.join("datasets", "imagenet_list", "imagenet_val_ids_50k.txt")
+            # create file path of file containing all 50k image ids
+            file_path = os.path.join("datasets", "imagenet_list", "imagenet_val_ids_50k.txt")
         else:
-            # load default test list from robustbench
-            filename = os.path.join("robustbench", "data", "imagenet_test_image_ids.txt")
+            # create file path of default test list from robustbench
+            file_path = os.path.join("robustbench", "data", "imagenet_test_image_ids.txt")
 
         # load file containing file ids
-        with open(filename, 'r') as f:
+        with open(file_path, 'r') as f:
             fnames = f.readlines()
 
-        files = []
+        item_list = []
         for cor in corruptions_seq:
             corruption_dir_path = os.path.join(data_dir, cor, str(severity))
-            files += [(os.path.join(corruption_dir_path, fn.split('\n')[0]), class_to_idx[fn.split(os.sep)[0]]) for fn in fnames]
-        dataset_test.samples = files
+            item_list += [(os.path.join(corruption_dir_path, fn.split('\n')[0]), class_to_idx[fn.split(os.sep)[0]]) for fn in fnames]
+        dataset_test.samples = item_list
 
     return dataset_test

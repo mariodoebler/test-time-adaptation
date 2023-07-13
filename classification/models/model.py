@@ -3,7 +3,7 @@ import logging
 import timm
 import torch
 import torch.nn as nn
-import torchvision.models as models
+import torchvision
 
 from robustbench.model_zoo.architectures.utils_architectures import normalize_model, ImageNormalizer
 from robustbench.model_zoo.enums import ThreatModel
@@ -12,6 +12,7 @@ from robustbench.utils import load_model
 from copy import deepcopy
 from models import resnet26
 from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_D109_MASK
+from packaging import version
 
 logger = logging.getLogger(__name__)
 
@@ -23,28 +24,33 @@ def get_torchvision_model(model_name, weight_version="IMAGENET1K_V1"):
     :param weight_version: name of the pre-trained weights to restore
     :return: pre-trained model
     """
-    # create a dictionary that maps the model name to the corresponding weight function
-    name_to_weights = {name[:-8].lower(): name for name in dir(models) if "Weights" in name}
-    if not model_name in name_to_weights.keys():
-        raise ValueError(f"Model name '{model_name}' is not supported. Choose from: {name_to_weights.keys()}")
+    assert version.parse(torchvision.__version__) >= version.parse("0.13"), "Torchvision version has to be >= 0.13"
 
-    # get the weight function and check if the specified type of weights is available
-    model_weights = getattr(models, name_to_weights[model_name])
-    available_weight_versions = [version for version in dir(model_weights) if "IMAGENET1K" in version]
-    if not weight_version in available_weight_versions:
-        raise ValueError(f"Weight type '{weight_version}' is not supported. Choose from: {available_weight_versions}")
+    # check if the specified model name is available in torchvision
+    available_models = torchvision.models.list_models(module=torchvision.models)
+    if model_name not in available_models:
+        raise ValueError(f"Model '{model_name}' is not available in torchvision. Choose from: {available_models}")
+
+    # get the weight object of the specified model and the available weight initialization names
+    model_weights = torchvision.models.get_model_weights(model_name)
+    available_weights = [init_name for init_name in dir(model_weights) if "IMAGENET1K" in init_name]
+
+    # check if the specified type of weights is available
+    if weight_version not in available_weights:
+        raise ValueError(f"Weight type '{weight_version}' is not supported for torchvision model '{model_name}'."
+                         f" Choose from: {available_weights}")
 
     # restore the specified weights
     model_weights = getattr(model_weights, weight_version)
 
-    # setup the specified model and initialize it with the pre-trained weights
-    model = getattr(models, model_name)
-    model = model(weights=model_weights)
+    # setup the specified model and initialize it with the specified pre-trained weights
+    model = torchvision.models.get_model(model_name, weights=model_weights)
 
     # get the transformation and add the input normalization to the model
     transform = model_weights.transforms()
     model = normalize_model(model, transform.mean, transform.std)
-    logger.info(f"Successfully restored '{weight_version}' pre-trained weights for model '{model_name}' from torchvision!")
+    logger.info(f"Successfully restored '{weight_version}' pre-trained weights"
+                f" for model '{model_name}' from torchvision!")
     return model
 
 
@@ -89,13 +95,13 @@ class ResNetDomainNet126(torch.nn.Module):
 
         # 1) ResNet backbone (up to penultimate layer)
         if not self.use_bottleneck:
-            model = models.__dict__[self.arch](pretrained=True)
+            model = torchvision.models.get_model(self.arch, weights="IMAGENET1K_V1")
             modules = list(model.children())[:-1]
             self.encoder = torch.nn.Sequential(*modules)
             self._output_dim = model.fc.in_features
         # 2) ResNet backbone + bottlenck (last fc as bottleneck)
         else:
-            model = models.__dict__[self.arch](pretrained=True)
+            model = torchvision.models.get_model(self.arch, weights="IMAGENET1K_V1")
             model.fc = torch.nn.Linear(model.fc.in_features, self.bottleneck_dim)
             bn = torch.nn.BatchNorm1d(self.bottleneck_dim)
             self.encoder = torch.nn.Sequential(model, bn)

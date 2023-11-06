@@ -1,6 +1,9 @@
 MODEL:
-  ADAPTATION: norm_alpha
+  ADAPTATION: bnalpha
   ARCH: resnet50
+  CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"
+BN:
+  ALPHA: 0.1
 TEST:
   BATCH_SIZE: 1
 CORRUPTION:
@@ -11,4 +14,3 @@ CORRUPTION:
     - clipart
     - painting
     - sketch
-CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"

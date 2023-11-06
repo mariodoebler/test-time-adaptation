@@ -5,7 +5,7 @@ CORRUPTION:
   TYPE:
     - ""
 MODEL:
-  ADAPTATION: norm_ema
+  ADAPTATION: bnema
   ARCH: resnet50
 TEST:
   BATCH_SIZE: 64

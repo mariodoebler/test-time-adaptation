@@ -3,20 +3,23 @@ Builds upon: https://github.com/mr-eggplant/EATA
 Corresponding paper: https://arxiv.org/abs/2204.02610
 """
 
+import os
 import math
 import logging
 
 import torch
 import torch.nn as nn
-import torch.jit
 import torch.nn.functional as F
 
 from methods.base import TTAMethod
 from datasets.data_loading import get_source_loader
+from utils.registry import ADAPTATION_REGISTRY
+from utils.losses import Entropy
 
 logger = logging.getLogger(__name__)
 
 
+@ADAPTATION_REGISTRY.register()
 class EATA(TTAMethod):
     """EATA adapts a model by entropy minimization during testing.
     Once EATAed, a model adapts itself by updating on every forward.
@@ -24,27 +27,34 @@ class EATA(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
 
-        self.num_samples_update_1 = 0  # number of samples after First filtering, exclude unreliable samples
-        self.num_samples_update_2 = 0  # number of samples after Second filtering, exclude both unreliable and redundant samples
+        self.num_samples_update_1 = 0  # number of samples after first filtering, exclude unreliable samples
+        self.num_samples_update_2 = 0  # number of samples after second filtering, exclude both unreliable and redundant samples
         self.e_margin = math.log(self.num_classes) * 0.40   # hyper-parameter E_0 (Eqn. 3)
         self.d_margin = cfg.EATA.D_MARGIN   # hyperparameter \epsilon for cosine similarity thresholding (Eqn. 5)
 
-        self.current_model_probs = None # the moving average of probability vector (Eqn. 4)
-        self.fisher_alpha = cfg.EATA.FISHER_ALPHA # trade-off \beta for two losses (Eqn. 8)
+        self.current_model_probs = None  # the moving average of probability vector (Eqn. 4)
+        self.fisher_alpha = cfg.EATA.FISHER_ALPHA  # trade-off \beta for two losses (Eqn. 8)
+
+        # setup loss function
+        self.softmax_entropy = Entropy()
 
         if self.fisher_alpha > 0.0:
             # compute fisher informatrix
             batch_size_src = cfg.TEST.BATCH_SIZE if cfg.TEST.BATCH_SIZE > 1 else cfg.TEST.WINDOW_LENGTH
             _, fisher_loader = get_source_loader(dataset_name=cfg.CORRUPTION.DATASET,
-                                                 root_dir=cfg.DATA_DIR, adaptation=cfg.MODEL.ADAPTATION,
-                                                 batch_size=batch_size_src, ckpt_path=cfg.CKPT_PATH,
-                                                 num_samples=cfg.EATA.NUM_SAMPLES)
-
+                                                 adaptation=cfg.MODEL.ADAPTATION,
+                                                 preprocess=model.model_preprocess,
+                                                 data_root_dir=cfg.DATA_DIR,
+                                                 batch_size=batch_size_src,
+                                                 ckpt_path=cfg.MODEL.CKPT_PATH,
+                                                 num_samples=cfg.SOURCE.NUM_SAMPLES,    # number of samples for ewc reg.
+                                                 percentage=cfg.SOURCE.PERCENTAGE,
+                                                 workers=min(cfg.SOURCE.NUM_WORKERS, os.cpu_count()))
             ewc_optimizer = torch.optim.SGD(self.params, 0.001)
             self.fishers = {} # fisher regularizer items for anti-forgetting, need to be calculated pre model adaptation (Eqn. 9)
-            train_loss_fn = nn.CrossEntropyLoss().cuda()
+            train_loss_fn = nn.CrossEntropyLoss().to(self.device)
             for iter_, batch in enumerate(fisher_loader, start=1):
-                images = batch[0].cuda(non_blocking=True)
+                images = batch[0].to(self.device, non_blocking=True)
                 outputs = self.model(images)
                 _, targets = outputs.max(1)
                 loss = train_loss_fn(outputs, targets)
@@ -59,9 +69,10 @@ class EATA(TTAMethod):
                             fisher = fisher / iter_
                         self.fishers.update({name: [fisher, param.data.clone().detach()]})
                 ewc_optimizer.zero_grad()
-            logger.info("compute fisher matrices finished")
+            logger.info("Finished computing the fisher matrices...")
             del ewc_optimizer
         else:
+            logger.info("Not using EWC regularization. EATA decays to ETA!")
             self.fishers = None
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
@@ -72,7 +83,7 @@ class EATA(TTAMethod):
         """
         imgs_test = x[0]
         outputs = self.model(imgs_test)
-        entropys = softmax_entropy(outputs)
+        entropys = self.softmax_entropy(outputs)
 
         # filter unreliable samples
         filter_ids_1 = torch.where(entropys < self.e_margin)
@@ -98,7 +109,7 @@ class EATA(TTAMethod):
         """
         # implementation version 2, compute loss, forward all batch, forward and backward selected samples again.
         # if x[ids1][ids2].size(0) != 0:
-        #     loss = softmax_entropy(model(x[ids1][ids2])).mul(coeff).mean(0) # reweight entropy losses for diff. samples
+        #     loss = self.softmax_entropy(model(x[ids1][ids2])).mul(coeff).mean(0) # reweight entropy losses for diff. samples
         """
         if self.fishers is not None:
             ewc_loss = 0
@@ -160,15 +171,6 @@ class EATA(TTAMethod):
                 m.requires_grad_(True)
             elif isinstance(m, (nn.LayerNorm, nn.GroupNorm)):
                 m.requires_grad_(True)
-
-
-@torch.jit.script
-def softmax_entropy(x: torch.Tensor) -> torch.Tensor:
-    """Entropy of softmax distribution from logits."""
-    temprature = 1
-    x = x/ temprature
-    x = -(x.softmax(1) * x.log_softmax(1)).sum(1)
-    return x
 
 
 def update_model_probs(current_model_probs, new_probs):

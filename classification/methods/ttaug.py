@@ -6,16 +6,18 @@ from copy import deepcopy
 from methods.base import TTAMethod
 from augmentations.transforms_memo_cifar import aug_cifar
 from augmentations.transforms_memo_imagenet import aug_imagenet
+from utils.registry import ADAPTATION_REGISTRY
 
 
-def tta(image, n_augmentations, aug):
+def tta(image, n_augmentations, aug, device):
 
     image = np.clip(image[0].cpu().numpy() * 255., 0, 255).astype(np.uint8).transpose(1, 2, 0)
     inputs = [aug(Image.fromarray(image)) for _ in range(n_augmentations)]
-    inputs = torch.stack(inputs).cuda()
+    inputs = torch.stack(inputs).to(device)
     return inputs
 
 
+@ADAPTATION_REGISTRY.register()
 class TTAug(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
@@ -30,7 +32,7 @@ class TTAug(TTAMethod):
         if self.episodic:
             self.reset()
 
-        x_aug = tta(x, self.n_augmentations, aug=self.augmentations)
+        x_aug = tta(x, self.n_augmentations, aug=self.augmentations, device=self.device)
         outputs = self.model(x_aug).mean(0, keepdim=True)
 
         return outputs

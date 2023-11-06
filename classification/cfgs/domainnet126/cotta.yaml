@@ -9,6 +9,7 @@ CORRUPTION:
 MODEL:
   ADAPTATION: cotta
   ARCH: resnet50
+  CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"
 OPTIM:
   METHOD: SGD
   STEPS: 1
@@ -20,4 +21,3 @@ COTTA:
   AP: 0.1
 TEST:
   BATCH_SIZE: 128
-CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"

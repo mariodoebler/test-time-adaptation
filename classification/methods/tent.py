@@ -7,14 +7,20 @@ import torch.nn as nn
 import torch.jit
 
 from methods.base import TTAMethod
+from utils.registry import ADAPTATION_REGISTRY
+from utils.losses import Entropy
 
 
+@ADAPTATION_REGISTRY.register()
 class Tent(TTAMethod):
     """Tent adapts a model by entropy minimization during testing.
     Once tented, a model adapts itself by updating on every forward.
     """
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
+
+        # setup loss function
+        self.softmax_entropy = Entropy()
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
@@ -23,7 +29,7 @@ class Tent(TTAMethod):
         """
         imgs_test = x[0]
         outputs = self.model(imgs_test)
-        loss = softmax_entropy(outputs).mean(0)
+        loss = self.softmax_entropy(outputs).mean(0)
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
@@ -67,9 +73,3 @@ class Tent(TTAMethod):
                 m.requires_grad_(True)
             elif isinstance(m, (nn.LayerNorm, nn.GroupNorm)):
                 m.requires_grad_(True)
-
-
-@torch.jit.script
-def softmax_entropy(x: torch.Tensor) -> torch.Tensor:
-    """Entropy of softmax distribution from logits."""
-    return -(x.softmax(1) * x.log_softmax(1)).sum(1)

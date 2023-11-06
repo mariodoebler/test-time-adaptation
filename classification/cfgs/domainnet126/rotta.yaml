@@ -9,6 +9,7 @@ CORRUPTION:
 MODEL:
   ADAPTATION: rotta
   ARCH: resnet50
+  CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"
 OPTIM:
   BETA: 0.9
   LR: 0.001
@@ -17,4 +18,3 @@ OPTIM:
   WD: 0.0
 TEST:
   BATCH_SIZE: 128
-CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"

@@ -4,25 +4,31 @@ import timm
 import torch
 import torch.nn as nn
 import torchvision
+import torchvision.transforms as transforms
 
 from robustbench.model_zoo.architectures.utils_architectures import normalize_model, ImageNormalizer
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
 
+from typing import Union
 from copy import deepcopy
 from models import resnet26
-from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_D109_MASK
+from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_V2_MASK, IMAGENET_D109_MASK
 from packaging import version
 
 logger = logging.getLogger(__name__)
 
 
-def get_torchvision_model(model_name, weight_version="IMAGENET1K_V1"):
+def get_torchvision_model(model_name: str, weight_version: str = "IMAGENET1K_V1"):
     """
+    Restore a pre-trained model from torchvision
     Further details can be found here: https://pytorch.org/vision/0.14/models.html
-    :param model_name: name of the model to create and initialize with pre-trained weights
-    :param weight_version: name of the pre-trained weights to restore
-    :return: pre-trained model
+    Input:
+        model_name: Name of the model to create and initialize with pre-trained weights
+        weight_version: Name of the pre-trained weights to restore
+    Returns:
+        model: The pre-trained model
+        preprocess: The corresponding input pre-processing
     """
     assert version.parse(torchvision.__version__) >= version.parse("0.13"), "Torchvision version has to be >= 0.13"
 
@@ -51,15 +57,23 @@ def get_torchvision_model(model_name, weight_version="IMAGENET1K_V1"):
     model = normalize_model(model, transform.mean, transform.std)
     logger.info(f"Successfully restored '{weight_version}' pre-trained weights"
                 f" for model '{model_name}' from torchvision!")
-    return model
+
+    # create the corresponding input transformation
+    preprocess = transforms.Compose([transforms.Resize(transform.resize_size, interpolation=transform.interpolation),
+                                     transforms.CenterCrop(transform.crop_size),
+                                     transforms.ToTensor()])
+    return model, preprocess
 
 
-def get_timm_model(model_name):
+def get_timm_model(model_name: str):
     """
     Restore a pre-trained model from timm: https://github.com/huggingface/pytorch-image-models/tree/main/timm
     Quickstart: https://huggingface.co/docs/timm/quickstart
-    :param model_name: name of the model to create and initialize with pre-trained weights
-    :return: pre-trained model
+    Input:
+        model_name: Name of the model to create and initialize with pre-trained weights
+    Returns:
+        model: The pre-trained model
+        preprocess: The corresponding input pre-processing
     """
     # check if the defined model name is supported as pre-trained model
     available_models = timm.list_models(pretrained=True)
@@ -80,14 +94,20 @@ def get_timm_model(model_name):
         raise AttributeError(f"Attribute 'pretrained_cfg' is missing for model '{model_name}' from timm."
                              f" This prevents adding the correct input normalization to the model!")
 
-    return model
+    # get the input transformation
+    data_config = timm.data.resolve_model_data_config(model)
+    preprocess = timm.data.create_transform(**data_config)
+    # exclude the input normalization as it was added to the model
+    if isinstance(preprocess.transforms[-1], transforms.Normalize):
+        preprocess.transforms = preprocess.transforms[:-1]
+    return model, preprocess
 
 
 class ResNetDomainNet126(torch.nn.Module):
     """
     Architecture used for DomainNet-126
     """
-    def __init__(self, arch="resnet50", checkpoint_path=None, num_classes=126, bottleneck_dim=256):
+    def __init__(self, arch: str = "resnet50", checkpoint_path: str = None, num_classes: int = 126, bottleneck_dim: int = 256):
         super().__init__()
 
         self.arch = arch
@@ -191,7 +211,7 @@ class BaseModel(torch.nn.Module):
     """
     Change the model structure to perform the adaptation "AdaContrast" for other datasets
     """
-    def __init__(self, model, arch_name, dataset_name):
+    def __init__(self, model, arch_name: str, dataset_name: str):
         super().__init__()
 
         self.encoder, self.fc = split_up_model(model, arch_name=arch_name, dataset_name=dataset_name)
@@ -271,51 +291,64 @@ class TransformerWrapper(torch.nn.Module):
         return x
 
 
-def get_model(cfg, num_classes):
+def get_model(cfg, num_classes: int, device: Union[str, torch.device]):
+    """
+    Setup the pre-defined model architecture and restore the corresponding pre-trained weights
+    Input:
+        cfg: Configurations
+        num_classes: Number of classes
+        device: The device to put the loaded model
+    Return:
+        model: The pre-trained model
+        preprocess: The corresponding input pre-processing
+    """
+    preprocess = None
+
     if cfg.CORRUPTION.DATASET == "domainnet126":
-        base_model = ResNetDomainNet126(arch=cfg.MODEL.ARCH, checkpoint_path=cfg.CKPT_PATH, num_classes=num_classes)
+        base_model = ResNetDomainNet126(arch=cfg.MODEL.ARCH, checkpoint_path=cfg.MODEL.CKPT_PATH, num_classes=num_classes)
     else:
         try:
             # load model from torchvision
-            base_model = get_torchvision_model(cfg.MODEL.ARCH, weight_version=cfg.MODEL.WEIGHTS)
+            base_model, preprocess = get_torchvision_model(cfg.MODEL.ARCH, weight_version=cfg.MODEL.WEIGHTS)
         except ValueError:
             try:
                 # load model from timm
-                base_model = get_timm_model(cfg.MODEL.ARCH)
+                base_model, preprocess = get_timm_model(cfg.MODEL.ARCH)
             except ValueError:
                 try:
                     # load some custom models
                     if cfg.MODEL.ARCH == "resnet26_gn":
                         base_model = resnet26.build_resnet26()
-                        checkpoint = torch.load(cfg.CKPT_PATH, map_location="cpu")
+                        checkpoint = torch.load(cfg.MODEL.CKPT_PATH, map_location="cpu")
                         base_model.load_state_dict(checkpoint['net'])
                         base_model = normalize_model(base_model, resnet26.MEAN, resnet26.STD)
                     else:
                         raise ValueError(f"Model {cfg.MODEL.ARCH} is not supported!")
-                    logger.info(f"Successfully restored model '{cfg.MODEL.ARCH}' from: {cfg.CKPT_PATH}")
+                    logger.info(f"Successfully restored model '{cfg.MODEL.ARCH}' from: {cfg.MODEL.CKPT_PATH}")
                 except ValueError:
                     # load model from robustbench
                     dataset_name = cfg.CORRUPTION.DATASET.split("_")[0]
                     base_model = load_model(cfg.MODEL.ARCH, cfg.CKPT_DIR, dataset_name, ThreatModel.corruptions)
 
-        if cfg.CORRUPTION.DATASET == "imagenet_a":
-            base_model = ImageNetXWrapper(base_model, IMAGENET_A_MASK)
-        elif cfg.CORRUPTION.DATASET == "imagenet_r":
-            base_model = ImageNetXWrapper(base_model, IMAGENET_R_MASK)
-        elif cfg.CORRUPTION.DATASET == "imagenet_d109":
-            base_model = ImageNetXWrapper(base_model, IMAGENET_D109_MASK)
+        # In case of the imagenet variants, wrap a mask around the output layer to get the correct classes
+        if cfg.CORRUPTION.DATASET in ["imagenet_a", "imagenet_r", "imagenet_v2", "imagenet_d109"]:
+            mask = eval(f"{cfg.CORRUPTION.DATASET.upper()}_MASK")
+            base_model = ImageNetXWrapper(base_model, mask=mask)
 
-    return base_model.cuda()
+    return base_model.to(device), preprocess
 
 
-def split_up_model(model, arch_name, dataset_name):
+def split_up_model(model, arch_name: str, dataset_name: str):
     """
     Split up the model into an encoder and a classifier.
     This is required for methods like RMT and AdaContrast
-    :param model: model to be split up
-    :param arch_name: name of the network
-    :param dataset_name: name of the dataset
-    :return: encoder and classifier
+    Input:
+        model: Model to be split up
+        arch_name: Name of the network
+        dataset_name: Name of the dataset
+    Returns:
+        encoder: The encoder of the model
+        classifier The classifier of the model
     """
     if hasattr(model, "model") and hasattr(model.model, "pretrained_cfg") and hasattr(model.model, model.model.pretrained_cfg["classifier"]):
         # split up models loaded from timm
@@ -370,11 +403,8 @@ def split_up_model(model, arch_name, dataset_name):
         raise ValueError(f"The model architecture '{arch_name}' is not supported for dataset '{dataset_name}'.")
 
     # add a masking layer to the classifier
-    if dataset_name == "imagenet_a":
-        classifier = nn.Sequential(classifier, ImageNetXMaskingLayer(IMAGENET_A_MASK))
-    elif dataset_name == "imagenet_r":
-        classifier = nn.Sequential(classifier, ImageNetXMaskingLayer(IMAGENET_R_MASK))
-    elif dataset_name == "imagenet_d109":
-        classifier = nn.Sequential(classifier, ImageNetXMaskingLayer(IMAGENET_D109_MASK))
+    if dataset_name in ["imagenet_a", "imagenet_r", "imagenet_v2", "imagenet_d109"]:
+        mask = eval(f"{dataset_name.upper()}_MASK")
+        classifier = nn.Sequential(classifier, ImageNetXMaskingLayer(mask))
 
     return encoder, classifier

@@ -9,18 +9,24 @@ import torch.nn.functional as F
 from methods.base import TTAMethod
 from models.style_transfer import TransferNet
 from datasets.data_loading import get_source_loader
+from utils.registry import ADAPTATION_REGISTRY
 
 logger = logging.getLogger(__name__)
 
 
+@ADAPTATION_REGISTRY.register()
 class GTTA(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
 
         batch_size_src = cfg.TEST.BATCH_SIZE if cfg.TEST.BATCH_SIZE > 1 else cfg.TEST.WINDOW_LENGTH
         _, self.src_loader = get_source_loader(dataset_name=cfg.CORRUPTION.DATASET,
-                                               root_dir=cfg.DATA_DIR, adaptation=cfg.MODEL.ADAPTATION,
-                                               batch_size=batch_size_src, ckpt_path=cfg.CKPT_PATH,
+                                               adaptation=cfg.MODEL.ADAPTATION,
+                                               preprocess=model.model_preprocess,
+                                               data_root_dir=cfg.DATA_DIR,
+                                               batch_size=batch_size_src,
+                                               ckpt_path=cfg.MODEL.CKPT_PATH,
+                                               num_samples=cfg.SOURCE.NUM_SAMPLES,
                                                percentage=cfg.SOURCE.PERCENTAGE,
                                                workers=min(cfg.SOURCE.NUM_WORKERS, os.cpu_count()))
         self.src_loader_iter = iter(self.src_loader)
@@ -30,9 +36,9 @@ class GTTA(TTAMethod):
         self.buffer_size = 100000
         self.counter = 0
         ckpt_dir = cfg.CKPT_DIR
-        ckpt_path = cfg.CKPT_PATH
+        ckpt_path = cfg.MODEL.CKPT_PATH
 
-        self.avg_conf = torch.tensor(0.9).cuda()
+        self.avg_conf = torch.tensor(0.9).to(self.device)
         self.ignore_label = -1
 
         # Create style-transfer network
@@ -41,8 +47,8 @@ class GTTA(TTAMethod):
             self.adain_model = TransferNet(ckpt_path_vgg=os.path.join(ckpt_dir, "adain", "vgg_normalized.pth"),
                                            ckpt_path_dec=fname,
                                            data_loader=self.src_loader,
-                                           num_iters_pretrain=cfg.GTTA.PRETRAIN_STEPS_ADAIN).cuda()
-            self.moments_list = [[torch.tensor([], device="cuda"), torch.tensor([], device="cuda")] for _ in range(2)]
+                                           num_iters_pretrain=cfg.GTTA.PRETRAIN_STEPS_ADAIN).to(self.device)
+            self.moments_list = [[torch.tensor([], device=self.device), torch.tensor([], device=self.device)] for _ in range(2)]
             self.models = [self.model, self.adain_model]
         else:
             self.adain_model = None
@@ -76,7 +82,7 @@ class GTTA(TTAMethod):
                         batch = next(self.src_loader_iter)
 
                     # train on source data
-                    imgs_src = batch[0].cuda()
+                    imgs_src = batch[0].to(self.device)
 
                     self.adain_model.opt_adain_dec.zero_grad()
                     _, loss_content, loss_style = self.adain_model(imgs_src, moments_list=self.moments_list)
@@ -94,7 +100,7 @@ class GTTA(TTAMethod):
                 batch = next(self.src_loader_iter)
 
             # train on labeled source data
-            imgs_src, labels_src = batch[0].cuda(), batch[1].cuda().long()
+            imgs_src, labels_src = batch[0].to(self.device), batch[1].to(self.device).long()
 
             if self.use_style_transfer:
                 # Generate style transferred images from source images

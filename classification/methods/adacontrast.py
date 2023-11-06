@@ -12,6 +12,7 @@ import torch.nn.functional as F
 
 from methods.base import TTAMethod
 from models.model import BaseModel
+from utils.registry import ADAPTATION_REGISTRY
 
 
 class AdaMoCo(nn.Module):
@@ -24,6 +25,7 @@ class AdaMoCo(nn.Module):
         self,
         src_model,
         momentum_model,
+        device,
         K=16384,
         m=0.999,
         T_moco=0.07,
@@ -41,6 +43,7 @@ class AdaMoCo(nn.Module):
         self.m = m
         self.T_moco = T_moco
         self.queue_ptr = 0
+        self.device = device
 
         # create the encoders
         self.src_model = src_model
@@ -91,7 +94,7 @@ class AdaMoCo(nn.Module):
 
         start = self.queue_ptr
         end = start + len(keys)
-        idxs_replace = torch.arange(start, end).cuda() % self.K
+        idxs_replace = torch.arange(start, end).to(self.device) % self.K
         self.mem_feat[:, idxs_replace] = keys.T
         self.mem_labels[idxs_replace] = pseudo_labels
         self.queue_ptr = end % self.K
@@ -140,6 +143,7 @@ class AdaMoCo(nn.Module):
         return feats_q, logits_q, logits_ins, k
 
 
+@ADAPTATION_REGISTRY.register()
 class AdaContrast(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
@@ -173,14 +177,15 @@ class AdaContrast(TTAMethod):
         self.model = AdaMoCo(
                         src_model=self.src_model,
                         momentum_model=self.momentum_model,
+                        device=self.device,
                         K=self.queue_size,
                         m=self.m,
                         T_moco=self.T_moco,
-                        ).cuda()
+                        ).to(self.device)
 
         self.banks = {
-            "features": torch.tensor([], device="cuda"),
-            "probs": torch.tensor([], device="cuda"),
+            "features": torch.tensor([], device=self.device),
+            "probs": torch.tensor([], device=self.device),
             "ptr": 0
         }
 
@@ -249,7 +254,7 @@ class AdaContrast(TTAMethod):
         loss_div = (
             diversification_loss(logits_w, logits_q, self.ce_sup_type)
             if self.eta > 0
-            else torch.tensor([0.0]).to("cuda")
+            else torch.tensor([0.0]).to(self.device)
         )
 
         loss = (
@@ -275,14 +280,15 @@ class AdaContrast(TTAMethod):
         self.model = AdaMoCo(
                         src_model=self.src_model,
                         momentum_model=self.momentum_model,
+                        device=self.device,
                         K=self.queue_size,
                         m=self.m,
                         T_moco=self.T_moco,
-                        ).cuda()
+                        ).to(self.device)
         self.first_X_samples = 0
         self.banks = {
-            "features": torch.tensor([], device="cuda"),
-            "probs": torch.tensor([], device="cuda"),
+            "features": torch.tensor([], device=self.device),
+            "probs": torch.tensor([], device=self.device),
             "ptr": 0
         }
 
@@ -300,7 +306,7 @@ class AdaContrast(TTAMethod):
             self.banks["probs"] = torch.cat([self.banks["probs"], probs], dim=0)
             self.banks["ptr"] = end % len(self.banks["features"])
         else:
-            idxs_replace = torch.arange(start, end).cuda() % len(self.banks["features"])
+            idxs_replace = torch.arange(start, end).to(self.device) % len(self.banks["features"])
             self.banks["features"][idxs_replace, :] = features
             self.banks["probs"][idxs_replace, :] = probs
             self.banks["ptr"] = end % len(self.banks["features"])
@@ -319,7 +325,7 @@ class AdaContrast(TTAMethod):
 
     def setup_optimizer(self):
         if self.cfg.CORRUPTION.DATASET == "domainnet126":
-            return setup_adacontrast_optimizer(self.model)
+            return setup_adacontrast_optimizer(self.model, self.cfg)
         elif self.cfg.OPTIM.METHOD == 'Adam':
             return optim.Adam(self.params,
                               lr=self.cfg.OPTIM.LR,
@@ -336,7 +342,7 @@ class AdaContrast(TTAMethod):
             raise NotImplementedError
 
 
-def setup_adacontrast_optimizer(model):
+def setup_adacontrast_optimizer(model, cfg):
     backbone_params, extra_params = (
         model.src_model.get_params()
         if hasattr(model, "src_model")
@@ -418,13 +424,13 @@ def refine_predictions(
 
 def instance_loss(logits_ins, pseudo_labels, mem_labels, contrast_type):
     # labels: positive key indicators
-    labels_ins = torch.zeros(logits_ins.shape[0], dtype=torch.long).cuda()
+    labels_ins = torch.zeros(logits_ins.shape[0], dtype=torch.long).to(logits_ins.device)
 
     # in class_aware mode, do not contrast with same-class samples
     if contrast_type == "class_aware" and pseudo_labels is not None:
         mask = torch.ones_like(logits_ins, dtype=torch.bool)
         mask[:, 1:] = pseudo_labels.reshape(-1, 1) != mem_labels  # (B, K)
-        logits_ins = torch.where(mask, logits_ins, torch.tensor([float("-inf")]).cuda())
+        logits_ins = torch.where(mask, logits_ins, torch.tensor([float("-inf")]).to(logits_ins.device))
 
     loss = F.cross_entropy(logits_ins, labels_ins)
 
@@ -482,7 +488,7 @@ def cross_entropy_loss(logits, labels):
 
 def entropy_minimization(logits):
     if len(logits) == 0:
-        return torch.tensor([0.0]).cuda()
+        return torch.tensor([0.0]).to(logits.device)
     probs = F.softmax(logits, dim=1)
     ents = -(probs * probs.log()).sum(dim=1)
 

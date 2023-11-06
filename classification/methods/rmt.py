@@ -11,7 +11,8 @@ from methods.base import TTAMethod
 from models.model import split_up_model
 from augmentations.transforms_cotta import get_tta_transforms
 from datasets.data_loading import get_source_loader
-
+from utils.registry import ADAPTATION_REGISTRY
+from utils.losses import SymmetricCrossEntropy
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +23,19 @@ def update_ema_variables(ema_model, model, alpha_teacher):
     return ema_model
 
 
+@ADAPTATION_REGISTRY.register()
 class RMT(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
 
         batch_size_src = cfg.TEST.BATCH_SIZE if cfg.TEST.BATCH_SIZE > 1 else cfg.TEST.WINDOW_LENGTH
         _, self.src_loader = get_source_loader(dataset_name=cfg.CORRUPTION.DATASET,
-                                               root_dir=cfg.DATA_DIR, adaptation=cfg.MODEL.ADAPTATION,
-                                               batch_size=batch_size_src, ckpt_path=cfg.CKPT_PATH,
+                                               adaptation=cfg.MODEL.ADAPTATION,
+                                               preprocess=model.model_preprocess,
+                                               data_root_dir=cfg.DATA_DIR,
+                                               batch_size=batch_size_src,
+                                               ckpt_path=cfg.MODEL.CKPT_PATH,
+                                               num_samples=cfg.SOURCE.NUM_SAMPLES,
                                                percentage=cfg.SOURCE.PERCENTAGE,
                                                workers=min(cfg.SOURCE.NUM_WORKERS, os.cpu_count()))
         self.src_loader_iter = iter(self.src_loader)
@@ -45,9 +51,12 @@ class RMT(TTAMethod):
         self.warmup_steps = cfg.RMT.NUM_SAMPLES_WARM_UP // batch_size_src
         self.final_lr = cfg.OPTIM.LR
         arch_name = cfg.MODEL.ARCH
-        ckpt_path = cfg.CKPT_PATH
+        ckpt_path = cfg.MODEL.CKPT_PATH
 
         self.tta_transform = get_tta_transforms(self.dataset_name)
+
+        # setup loss functions
+        self.symmetric_cross_entropy = SymmetricCrossEntropy()
 
         # Setup EMA model
         self.model_ema = self.copy_model(self.model)
@@ -77,7 +86,7 @@ class RMT(TTAMethod):
             with torch.no_grad():
                 for data in tqdm.tqdm(self.src_loader):
                     x, y = data[0], data[1]
-                    tmp_features = self.feature_extractor(x.cuda())
+                    tmp_features = self.feature_extractor(x.to(self.device))
                     features_src = torch.cat([features_src, tmp_features.view(tmp_features.shape[:2]).cpu()], dim=0)
                     labels_src = torch.cat([labels_src, y], dim=0)
                     if len(features_src) > 100000:
@@ -91,8 +100,8 @@ class RMT(TTAMethod):
 
             torch.save(self.prototypes_src, fname)
 
-        self.prototypes_src = self.prototypes_src.cuda().unsqueeze(1)
-        self.prototype_labels_src = torch.arange(start=0, end=self.num_classes, step=1).cuda().long()
+        self.prototypes_src = self.prototypes_src.to(self.device).unsqueeze(1)
+        self.prototype_labels_src = torch.arange(start=0, end=self.num_classes, step=1).to(self.device).long()
 
         # setup projector
         if self.dataset_name == "domainnet126":
@@ -101,7 +110,7 @@ class RMT(TTAMethod):
         else:
             num_channels = self.prototypes_src.shape[-1]
             self.projector = nn.Sequential(nn.Linear(num_channels, self.projection_dim), nn.ReLU(),
-                                           nn.Linear(self.projection_dim, self.projection_dim)).cuda()
+                                           nn.Linear(self.projection_dim, self.projection_dim)).to(self.device)
             self.optimizer.add_param_group({'params': self.projector.parameters(), 'lr': self.optimizer.param_groups[0]["lr"]})
 
         # warm up the mean-teacher framework
@@ -150,12 +159,12 @@ class RMT(TTAMethod):
                 batch = next(self.src_loader_iter)
 
             imgs_src, labels_src = batch[0], batch[1]
-            imgs_src, labels_src = imgs_src.cuda(), labels_src.cuda().long()
+            imgs_src, labels_src = imgs_src.to(self.device), labels_src.to(self.device).long()
 
             # forward the test data and optimize the model
             outputs = self.model(imgs_src)
             outputs_ema = self.model_ema(imgs_src)
-            loss = symmetric_cross_entropy(outputs, outputs_ema).mean(0)
+            loss = self.symmetric_cross_entropy(outputs, outputs_ema).mean(0)
             loss.backward()
             self.optimizer.step()
             self.optimizer.zero_grad()
@@ -172,14 +181,14 @@ class RMT(TTAMethod):
         if labels is not None and mask is not None:
             raise ValueError('Cannot define both `labels` and `mask`')
         elif labels is None and mask is None:
-            mask = torch.eye(batch_size, dtype=torch.float32).cuda()
+            mask = torch.eye(batch_size, dtype=torch.float32).to(self.device)
         elif labels is not None:
             labels = labels.contiguous().view(-1, 1)
             if labels.shape[0] != batch_size:
                 raise ValueError('Num of labels does not match num of features')
-            mask = torch.eq(labels, labels.T).float().cuda()
+            mask = torch.eq(labels, labels.T).float().to(self.device)
         else:
-            mask = mask.float().cuda()
+            mask = mask.float().to(self.device)
 
         contrast_count = features.shape[1]
         contrast_feature = torch.cat(torch.unbind(features, dim=1), dim=0)
@@ -206,7 +215,7 @@ class RMT(TTAMethod):
         logits_mask = torch.scatter(
             torch.ones_like(mask),
             1,
-            torch.arange(batch_size * anchor_count).view(-1, 1).cuda(),
+            torch.arange(batch_size * anchor_count).view(-1, 1).to(self.device),
             0
         )
         mask = mask * logits_mask
@@ -256,8 +265,8 @@ class RMT(TTAMethod):
                               features_aug_test.view(features_test.shape[0], 1, features_test.shape[1])], dim=1)
         loss_contrastive = self.contrastive_loss(features=features, labels=None)
 
-        loss_entropy = self_training(x=outputs_test, x_aug=outputs_aug_test, x_ema=outputs_ema).mean(0)
-        loss_trg = self.lambda_ce_trg * loss_entropy + self.lambda_cont * loss_contrastive
+        loss_self_training = (0.5 * self.symmetric_cross_entropy(outputs_test, outputs_ema) + 0.5 * self.symmetric_cross_entropy(outputs_aug_test, outputs_ema)).mean(0)
+        loss_trg = self.lambda_ce_trg * loss_self_training + self.lambda_cont * loss_contrastive
         loss_trg.backward()
 
         if self.lambda_ce_src > 0:
@@ -270,9 +279,9 @@ class RMT(TTAMethod):
 
             # train on labeled source data
             imgs_src, labels_src = batch[0], batch[1]
-            features_src = self.feature_extractor(imgs_src.cuda())
+            features_src = self.feature_extractor(imgs_src.to(self.device))
             outputs_src = self.classifier(features_src)
-            loss_ce_src = F.cross_entropy(outputs_src, labels_src.cuda().long())
+            loss_ce_src = F.cross_entropy(outputs_src, labels_src.to(self.device).long())
             loss_ce_src *= self.lambda_ce_src
             loss_ce_src.backward()
 
@@ -314,14 +323,3 @@ class RMT(TTAMethod):
                 m.requires_grad_(True)
             else:
                 m.requires_grad_(True)
-
-
-@torch.jit.script
-def self_training(x, x_aug, x_ema):# -> torch.Tensor:
-    return - 0.25 * (x_ema.softmax(1) * x.log_softmax(1)).sum(1) - 0.25 * (x.softmax(1) * x_ema.log_softmax(1)).sum(1) \
-           - 0.25 * (x_ema.softmax(1) * x_aug.log_softmax(1)).sum(1) - 0.25 * (x_aug.softmax(1) * x_ema.log_softmax(1)).sum(1)
-
-
-@torch.jit.script
-def symmetric_cross_entropy(x, x_ema):# -> torch.Tensor:
-    return -0.5*(x_ema.softmax(1) * x.log_softmax(1)).sum(1)-0.5*(x.softmax(1) * x_ema.log_softmax(1)).sum(1)

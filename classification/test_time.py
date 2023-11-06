@@ -1,25 +1,14 @@
 import os
+import torch
 import logging
 import numpy as np
+import methods
 
 from models.model import get_model
-from utils import get_accuracy, eval_domain_dict
+from utils.eval_utils import get_accuracy, eval_domain_dict
+from utils.registry import ADAPTATION_REGISTRY
 from datasets.data_loading import get_test_loader
-from conf import cfg, load_cfg_from_args, get_num_classes, get_domain_sequence, adaptation_method_lookup
-
-from methods.tent import Tent
-from methods.ttaug import TTAug
-from methods.memo import MEMO
-from methods.cotta import CoTTA
-from methods.gtta import GTTA
-from methods.adacontrast import AdaContrast
-from methods.rmt import RMT
-from methods.eata import EATA
-from methods.norm import Norm
-from methods.lame import LAME
-from methods.sar import SAR
-from methods.rotta import RoTTA
-from methods.roid import ROID
+from conf import cfg, load_cfg_from_args, get_num_classes, ckpt_path_to_domain_seq
 
 logger = logging.getLogger(__name__)
 
@@ -37,29 +26,38 @@ def evaluate(description):
                       ]
     assert cfg.SETTING in valid_settings, f"The setting '{cfg.SETTING}' is not supported! Choose from: {valid_settings}"
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     num_classes = get_num_classes(dataset_name=cfg.CORRUPTION.DATASET)
-    base_model = get_model(cfg, num_classes)
+
+    # get the base model and its corresponding input pre-processing (if available)
+    base_model, model_preprocess = get_model(cfg, num_classes, device)
+
+    # append the input pre-processing to the base model
+    base_model.model_preprocess = model_preprocess
 
     # setup test-time adaptation method
-    model = eval(f'{adaptation_method_lookup(cfg.MODEL.ADAPTATION)}')(cfg=cfg, model=base_model, num_classes=num_classes)
-    logger.info(f"Successfully prepared test-time adaptation method: {cfg.MODEL.ADAPTATION.upper()}")
+    available_adaptations = ADAPTATION_REGISTRY.registered_names()
+    assert cfg.MODEL.ADAPTATION in available_adaptations, \
+        f"The adaptation '{cfg.MODEL.ADAPTATION}' is not supported! Choose from: {available_adaptations}"
+    model = ADAPTATION_REGISTRY.get(cfg.MODEL.ADAPTATION)(cfg=cfg, model=base_model, num_classes=num_classes)
+    logger.info(f"Successfully prepared test-time adaptation method: {cfg.MODEL.ADAPTATION}")
 
     # get the test sequence containing the corruptions or domain names
-    if cfg.CORRUPTION.DATASET in {"domainnet126"}:
+    if cfg.CORRUPTION.DATASET == "domainnet126":
         # extract the domain sequence for a specific checkpoint.
-        dom_names_all = get_domain_sequence(ckpt_path=cfg.CKPT_PATH)
-    elif cfg.CORRUPTION.DATASET in {"imagenet_d", "imagenet_d109"} and not cfg.CORRUPTION.TYPE[0]:
-        # dom_names_all = ["clipart", "infograph", "painting", "quickdraw", "real", "sketch"]
-        dom_names_all = ["clipart", "infograph", "painting", "real", "sketch"]
+        domain_sequence = ckpt_path_to_domain_seq(ckpt_path=cfg.MODEL.CKPT_PATH)
+    elif cfg.CORRUPTION.DATASET in ["imagenet_d", "imagenet_d109"] and not cfg.CORRUPTION.TYPE[0]:
+        # domain_sequence = ["clipart", "infograph", "painting", "quickdraw", "real", "sketch"]
+        domain_sequence = ["clipart", "infograph", "painting", "real", "sketch"]
     else:
-        dom_names_all = cfg.CORRUPTION.TYPE
-    logger.info(f"Using the following domain sequence: {dom_names_all}")
+        domain_sequence = cfg.CORRUPTION.TYPE
+    logger.info(f"Using the following domain sequence: {domain_sequence}")
 
     # prevent iterating multiple times over the same data in the mixed_domains setting
-    dom_names_loop = ["mixed"] if "mixed_domains" in cfg.SETTING else dom_names_all
+    domain_seq_loop = ["mixed"] if "mixed_domains" in cfg.SETTING else domain_sequence
 
     # setup the severities for the gradual setting
-    if "gradual" in cfg.SETTING and cfg.CORRUPTION.DATASET in {"cifar10_c", "cifar100_c", "imagenet_c"} and len(cfg.CORRUPTION.SEVERITY) == 1:
+    if "gradual" in cfg.SETTING and cfg.CORRUPTION.DATASET in ["cifar10_c", "cifar100_c", "imagenet_c"] and len(cfg.CORRUPTION.SEVERITY) == 1:
         severities = [1, 2, 3, 4, 5, 4, 3, 2, 1]
         logger.info(f"Using the following severity sequence for each domain: {severities}")
     else:
@@ -70,7 +68,7 @@ def evaluate(description):
     domain_dict = {}
 
     # start evaluation
-    for i_dom, domain_name in enumerate(dom_names_loop):
+    for i_dom, domain_name in enumerate(domain_seq_loop):
         if i_dom == 0 or "reset_each_shift" in cfg.SETTING:
             try:
                 model.reset()
@@ -84,13 +82,14 @@ def evaluate(description):
             test_data_loader = get_test_loader(setting=cfg.SETTING,
                                                adaptation=cfg.MODEL.ADAPTATION,
                                                dataset_name=cfg.CORRUPTION.DATASET,
-                                               root_dir=cfg.DATA_DIR,
+                                               preprocess=model_preprocess,
+                                               data_root_dir=cfg.DATA_DIR,
                                                domain_name=domain_name,
+                                               domain_names_all=domain_sequence,
                                                severity=severity,
                                                num_examples=cfg.CORRUPTION.NUM_EX,
                                                rng_seed=cfg.RNG_SEED,
-                                               domain_names_all=dom_names_all,
-                                               alpha_dirichlet=cfg.TEST.ALPHA_DIRICHLET,
+                                               delta_dirichlet=cfg.TEST.DELTA_DIRICHLET,
                                                batch_size=cfg.TEST.BATCH_SIZE,
                                                shuffle=False,
                                                workers=min(cfg.TEST.NUM_WORKERS, os.cpu_count()))
@@ -101,7 +100,8 @@ def evaluate(description):
                                             dataset_name=cfg.CORRUPTION.DATASET,
                                             domain_name=domain_name,
                                             setting=cfg.SETTING,
-                                            domain_dict=domain_dict)
+                                            domain_dict=domain_dict,
+                                            device=device)
 
             err = 1. - acc
             errs.append(err)
@@ -115,11 +115,10 @@ def evaluate(description):
     else:
         logger.info(f"mean error: {np.mean(errs):.2%}")
 
-    if "mixed_domains" in cfg.SETTING:
+    if "mixed_domains" in cfg.SETTING and len(domain_dict.values()) > 0:
         # print detailed results for each domain
-        eval_domain_dict(domain_dict, domain_seq=dom_names_all)
+        eval_domain_dict(domain_dict, domain_seq=domain_sequence)
 
 
 if __name__ == '__main__':
     evaluate('"Evaluation.')
-

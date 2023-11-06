@@ -20,6 +20,7 @@ class TTAMethod(nn.Module):
         self.dataset_name = cfg.CORRUPTION.DATASET
         self.steps = cfg.OPTIM.STEPS
         assert self.steps > 0, "requires >= 1 step(s) to forward and update"
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # configure model and optimizer
         self.configure_model()
@@ -30,7 +31,7 @@ class TTAMethod(nn.Module):
         # variables needed for single sample test-time adaptation (sstta) using a sliding window (buffer) approach
         self.input_buffer = None
         self.window_length = cfg.TEST.WINDOW_LENGTH
-        self.pointer = torch.tensor([0], dtype=torch.long).cuda()
+        self.pointer = torch.tensor([0], dtype=torch.long).to(self.device)
         # sstta: if the model has no batchnorm layers, we do not need to forward the whole buffer when not performing any updates
         self.has_bn = any([isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)) for m in model.modules()])
 

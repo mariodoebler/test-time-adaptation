@@ -12,16 +12,18 @@ import torch.jit
 from methods.base import TTAMethod
 from augmentations.transforms_memo_cifar import aug_cifar
 from augmentations.transforms_memo_imagenet import aug_imagenet
+from utils.registry import ADAPTATION_REGISTRY
 
 
-def tta(image, n_augmentations, aug):
+def tta(image, n_augmentations, aug, device):
 
     image = np.clip(image[0].cpu().numpy() * 255., 0, 255).astype(np.uint8).transpose(1, 2, 0)
     inputs = [aug(Image.fromarray(image)) for _ in range(n_augmentations)]
-    inputs = torch.stack(inputs).cuda()
+    inputs = torch.stack(inputs).to(device)
     return inputs
 
 
+@ADAPTATION_REGISTRY.register()
 class MEMO(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
@@ -35,7 +37,7 @@ class MEMO(TTAMethod):
             self.reset()
 
         for _ in range(self.steps):
-            x_aug = tta(x, self.n_augmentations, aug=self.augmentations)
+            x_aug = tta(x, self.n_augmentations, aug=self.augmentations, device=self.device)
             _ = self.forward_and_adapt(x_aug)
 
         return self.model(x)

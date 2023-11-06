@@ -10,10 +10,12 @@ import torch.nn.functional as F
 from copy import deepcopy
 from methods.base import TTAMethod
 from models.model import split_up_model
+from utils.registry import ADAPTATION_REGISTRY
 
 logger = logging.getLogger(__name__)
 
 
+@ADAPTATION_REGISTRY.register()
 class LAME(TTAMethod):
     """ Parameter-free Online Test-time Adaptation
     """

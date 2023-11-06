@@ -10,8 +10,10 @@ import torch.nn as nn
 from copy import deepcopy
 from methods.base import TTAMethod
 from augmentations.transforms_cotta import get_tta_transforms
+from utils.registry import ADAPTATION_REGISTRY
 
 
+@ADAPTATION_REGISTRY.register()
 class RoTTA(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
@@ -73,8 +75,8 @@ class RoTTA(TTAMethod):
             strong_sup_aug = self.transform(sup_data)
             ema_sup_out = self.model_ema(sup_data)
             stu_sup_out = self.model(strong_sup_aug)
-            instance_weight = timeliness_reweighting(ages)
-            l_sup = (softmax_entropy(stu_sup_out, ema_sup_out) * instance_weight).mean()
+            instance_weight = timeliness_reweighting(ages, device=self.device)
+            l_sup = (softmax_cross_entropy(stu_sup_out, ema_sup_out) * instance_weight).mean()
 
         l = l_sup
         if l is not None:
@@ -125,13 +127,13 @@ class RoTTA(TTAMethod):
 
 
 @torch.jit.script
-def softmax_entropy(x, x_ema):
+def softmax_cross_entropy(x, x_ema):
     return -(x_ema.softmax(1) * x.log_softmax(1)).sum(1)
 
 
-def timeliness_reweighting(ages):
+def timeliness_reweighting(ages, device):
     if isinstance(ages, list):
-        ages = torch.tensor(ages).float().cuda()
+        ages = torch.tensor(ages).float().to(device)
     return torch.exp(-ages) / (1 + torch.exp(-ages))
 
 

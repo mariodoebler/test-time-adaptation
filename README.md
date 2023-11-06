@@ -61,6 +61,7 @@ This repository allows to study a wide range of different datasets, models, sett
   - `imagenet_c` [ImageNet-C](https://zenodo.org/record/2235448#.Yj2RO_co_mF)
   - `imagenet_a` [ImageNet-A](https://github.com/hendrycks/natural-adv-examples)
   - `imagenet_r` [ImageNet-R](https://github.com/hendrycks/imagenet-r)
+  - `imagenet_v2` [ImageNet-V2](https://huggingface.co/datasets/vaishaal/ImageNetV2/tree/main)
   - `imagenet_k` [ImageNet-Sketch](https://github.com/HaohanWang/ImageNet-Sketch)
   - `imagenet_d` [ImageNet-D](https://github.com/bethgelab/robustness/tree/main/examples/imagenet_d)
   - `imagenet_d109`
@@ -86,7 +87,7 @@ This repository allows to study a wide range of different datasets, models, sett
   [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
   [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
   [SAR](https://arxiv.org/pdf/2302.12400.pdf), [RoTTA](https://arxiv.org/pdf/2303.13899.pdf),
-  [GTTA](https://arxiv.org/abs/2208.07736), [RMT](https://arxiv.org/abs/2211.13081), and [ROID](https://arxiv.org/abs/2306.00650) .
+  [GTTA](https://arxiv.org/abs/2208.07736), [RMT](https://arxiv.org/abs/2211.13081), and [ROID](https://arxiv.org/abs/2306.00650).
 
 
 - **Modular Design**
@@ -101,6 +102,7 @@ To run one of the following benchmarks, the corresponding datasets need to be do
 - *ImageNet-to-ImageNet-C*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-C](https://zenodo.org/record/2235448#.Yj2RO_co_mF).
 - *ImageNet-to-ImageNet-A*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-A](https://github.com/hendrycks/natural-adv-examples).
 - *ImageNet-to-ImageNet-R*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-R](https://github.com/hendrycks/imagenet-r).
+- *ImageNet-to-ImageNet-V2*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-V2](https://huggingface.co/datasets/vaishaal/ImageNetV2/tree/main).
 - *ImageNet-to-ImageNet-Sketch*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php) and [ImageNet-Sketch](https://github.com/HaohanWang/ImageNet-Sketch).
 - *ImageNet-to-ImageNet-D*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php). For [ImageNet-D](https://openreview.net/pdf?id=LiC2vmzbpMO), see the download instructions for DomainNet-126 below. ImageNet-D is created by symlinks, which are set up at the first use.
 - *ImageNet-to-ImageNet-D109*: see instructions for DomainNet-126 below.
@@ -118,7 +120,7 @@ python test_time.py --cfg cfgs/[cifar10_c/cifar100_c/imagenet_c/imagenet_others/
 
 For imagenet_others, the argument CORRUPTION.DATASET has to be passed:
 ```bash
-python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/eata/cotta/adacontrast/lame/sar/rotta/gtta/rmt/roid].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_d109]
+python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/eata/cotta/adacontrast/lame/sar/rotta/gtta/rmt/roid].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_v2/imagenet_d109]
 ```
 
 E.g., to run ROID for the ImageNet-to-ImageNet-R benchmark, run the following command.
@@ -128,10 +130,10 @@ python test_time.py --cfg cfgs/imagenet_others/roid.yaml CORRUPTION.DATASET imag
 
 Alternatively, you can reproduce our experiments by running the `run.sh` in the subdirectory `classification`. For the different settings, modify `setting` within `run.sh`.
 
-To run the different continual DomainNet-126 sequences, you have to pass the `CKPT_PATH` argument. When not specifying a `CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
+To run the different continual DomainNet-126 sequences, you have to pass the `MODEL.CKPT_PATH` argument. When not specifying a `MODEL.CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
 The checkpoints are provided by [AdaContrast](https://github.com/DianCh/AdaContrast) and can be downloaded [here](https://drive.google.com/drive/folders/1OOSzrl6kzxIlEhNAK168dPXJcHwJ1A2X). Structurally, it is best to download them into the directory `./ckpt/domainnet126`.
 ```bash
-python test_time.py --cfg cfgs/domainnet126/rmt.yaml CKPT_PATH ./ckpt/domainnet126/best_clipart_2020.pth
+python test_time.py --cfg cfgs/domainnet126/rmt.yaml MODEL.CKPT_PATH ./ckpt/domainnet126/best_clipart_2020.pth
 ```
 
 For GTTA, we provide checkpoint files for the style transfer network. The checkpoints are provided on Google-Drive ([download](https://drive.google.com/file/d/1IpkUwyw8i9HEEjjD6pbbe_MCxM7yqKBq/view?usp=sharing)); extract the zip-file within the `classification` subdirectory.

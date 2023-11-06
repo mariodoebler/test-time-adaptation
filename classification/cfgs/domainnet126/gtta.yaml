@@ -9,6 +9,7 @@ CORRUPTION:
 MODEL:
   ADAPTATION: gtta
   ARCH: resnet50
+  CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"
 GTTA:
   USE_STYLE_TRANSFER: True
 OPTIM:
@@ -19,4 +20,3 @@ OPTIM:
   WD: 0.
 TEST:
   BATCH_SIZE: 128
-CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"

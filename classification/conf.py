@@ -35,9 +35,6 @@ _C.CKPT_DIR = "./ckpt"
 # Output directory
 _C.SAVE_DIR = "./output"
 
-# Path to a specific checkpoint
-_C.CKPT_PATH = ""
-
 # Log destination (in SAVE_DIR)
 _C.LOG_DEST = "log.txt"
 
@@ -63,12 +60,16 @@ _C.MODEL = CfgNode()
 
 # Some of the available models can be found here:
 # Torchvision: https://pytorch.org/vision/0.14/models.html
-# timm: https://github.com/huggingface/pytorch-image-models/tree/v0.6.13
+# timm: https://github.com/huggingface/pytorch-image-models
 # RobustBench: https://github.com/RobustBench/robustbench
 _C.MODEL.ARCH = 'Standard'
 
-# Type of pre-trained weights for torchvision models. See: https://pytorch.org/vision/0.14/models.html
+# Type of pre-trained weights
+# For torchvision models, see for example: https://pytorch.org/vision/0.14/models.html
 _C.MODEL.WEIGHTS = "IMAGENET1K_V1"
+
+# Path to a specific checkpoint
+_C.MODEL.CKPT_PATH = ""
 
 # Inspect the cfgs directory to see all possibilities
 _C.MODEL.ADAPTATION = 'source'
@@ -89,7 +90,7 @@ _C.CORRUPTION.TYPE = ['gaussian_noise', 'shot_noise', 'impulse_noise',
                       'elastic_transform', 'pixelate', 'jpeg_compression']
 _C.CORRUPTION.SEVERITY = [5, 4, 3, 2, 1]
 
-# Number of examples to evaluate. If num_ex is changed, each sequence is subsampled to the specified amount
+# Number of examples to evaluate. If num_ex != -1, each sequence is sub-sampled to the specified amount
 # For ImageNet-C, RobustBench loads a list containing 5000 samples.
 _C.CORRUPTION.NUM_EX = -1
 
@@ -108,10 +109,10 @@ _C.OPTIM.STEPS = 1
 # Learning rate
 _C.OPTIM.LR = 1e-3
 
-# Choices: Adam, SGD
+# Optimizer choices: Adam, SGD
 _C.OPTIM.METHOD = 'Adam'
 
-# Beta
+# Beta1 of Adam optimizer
 _C.OPTIM.BETA = 0.9
 
 # Momentum
@@ -164,10 +165,10 @@ _C.GTTA.USE_STYLE_TRANSFER = False
 # --------------------------------- RMT options ----------------------------- #
 _C.RMT = CfgNode()
 
-_C.RMT.LAMBDA_CE_SRC = 1.0
-_C.RMT.LAMBDA_CE_TRG = 1.0
-_C.RMT.LAMBDA_CONT = 1.0
-_C.RMT.NUM_SAMPLES_WARM_UP = 50000
+_C.RMT.LAMBDA_CE_SRC = 1.0          # Lambda for source replay. Set to 0 for source-free variant
+_C.RMT.LAMBDA_CE_TRG = 1.0          # Lambda for self-training
+_C.RMT.LAMBDA_CONT = 1.0            # Lambda for contrastive learning
+_C.RMT.NUM_SAMPLES_WARM_UP = 50000  # Number of samples used during the mean teacher warm-up
 
 # --------------------------------- AdaContrast options --------------------- #
 _C.ADACONTRAST = CfgNode()
@@ -175,12 +176,12 @@ _C.ADACONTRAST = CfgNode()
 _C.ADACONTRAST.QUEUE_SIZE = 16384
 _C.ADACONTRAST.CONTRAST_TYPE = "class_aware"
 _C.ADACONTRAST.CE_TYPE = "standard" # ["standard", "symmetric", "smoothed", "soft"]
-_C.ADACONTRAST.ALPHA = 1.0  # lambda for classification loss
-_C.ADACONTRAST.BETA = 1.0   # lambda for instance loss
-_C.ADACONTRAST.ETA = 1.0    # lambda for diversity loss
+_C.ADACONTRAST.ALPHA = 1.0          # Lambda for classification loss
+_C.ADACONTRAST.BETA = 1.0           # Lambda for instance loss
+_C.ADACONTRAST.ETA = 1.0            # Lambda for diversity loss
 
-_C.ADACONTRAST.DIST_TYPE = "cosine" # ["cosine", "euclidean"]
-_C.ADACONTRAST.CE_SUP_TYPE = "weak_strong" # ["weak_all", "weak_weak", "weak_strong", "self_all"]
+_C.ADACONTRAST.DIST_TYPE = "cosine"         # ["cosine", "euclidean"]
+_C.ADACONTRAST.CE_SUP_TYPE = "weak_strong"  # ["weak_all", "weak_weak", "weak_strong", "self_all"]
 _C.ADACONTRAST.REFINE_METHOD = "nearest_neighbors"
 _C.ADACONTRAST.NUM_NEIGHBORS = 10
 
@@ -195,11 +196,8 @@ _C.LAME.FORCE_SYMMETRY = False
 # --------------------------------- EATA options ---------------------------- #
 _C.EATA = CfgNode()
 
-# Fisher alpha
-_C.EATA.FISHER_ALPHA = 2000
-
-# Number of samples for ewc regularization
-_C.EATA.NUM_SAMPLES = 2000
+# Fisher alpha. If set to 0.0, EATA becomes ETA and no EWC regularization is used
+_C.EATA.FISHER_ALPHA = 2000.0
 
 # Diversity margin
 _C.EATA.D_MARGIN = 0.05
@@ -223,12 +221,12 @@ _C.ROTTA.LAMBDA_U = 1.0
 # --------------------------------- ROID options ---------------------------- #
 _C.ROID = CfgNode()
 
-_C.ROID.USE_WEIGHTING = True
-_C.ROID.USE_PRIOR_CORRECTION = True
-_C.ROID.USE_CONSISTENCY = True
-_C.ROID.MOMENTUM_SRC = 0.99     # Momentum for weight ensembling
-_C.ROID.MOMENTUM_PROBS = 0.9    # Momentum for diversity weighting
-_C.ROID.TEMPERATURE = 1/3
+_C.ROID.USE_WEIGHTING = True        # Whether to use loss weighting
+_C.ROID.USE_PRIOR_CORRECTION = True # Whether to use prior correction
+_C.ROID.USE_CONSISTENCY = True      # Whether to use consistency loss
+_C.ROID.MOMENTUM_SRC = 0.99         # Momentum for weight ensembling (param * model + (1-param) * model_src)
+_C.ROID.MOMENTUM_PROBS = 0.9        # Momentum for diversity weighting
+_C.ROID.TEMPERATURE = 1/3           # Temperature for weights
 
 # ------------------------------- Source options ---------------------------- #
 _C.SOURCE = CfgNode()
@@ -237,7 +235,10 @@ _C.SOURCE = CfgNode()
 _C.SOURCE.NUM_WORKERS = 4
 
 # Percentage of source samples used
-_C.SOURCE.PERCENTAGE = 1.0   # [0, 1] possibility to reduce the number of source samples
+_C.SOURCE.PERCENTAGE = 1.0   # (0, 1] Possibility to reduce the number of source samples
+
+# Possibility to define the number of source samples. The default setting corresponds to all source samples
+_C.SOURCE.NUM_SAMPLES = -1
 
 # ------------------------------- Testing options --------------------------- #
 _C.TEST = CfgNode()
@@ -245,7 +246,7 @@ _C.TEST = CfgNode()
 # Number of workers for test data loading
 _C.TEST.NUM_WORKERS = 4
 
-# Batch size for evaluation (and updates for norm + tent)
+# Batch size for evaluation (and updates)
 _C.TEST.BATCH_SIZE = 128
 
 # If the batch size is 1, a sliding window approach can be applied by setting window length > 1
@@ -254,8 +255,8 @@ _C.TEST.WINDOW_LENGTH = 1
 # Number of augmentations for methods relying on TTA (test time augmentation)
 _C.TEST.N_AUGMENTATIONS = 32
 
-# The alpha value of the dirichlet distribution used for sorting the class labels.
-_C.TEST.ALPHA_DIRICHLET = 0.0
+# The value of the Dirichlet distribution used for sorting the class labels.
+_C.TEST.DELTA_DIRICHLET = 0.0
 
 # --------------------------------- CUDNN options --------------------------- #
 _C.CUDNN = CfgNode()
@@ -354,64 +355,45 @@ def load_cfg_from_args(description="Config options."):
     logger.info(cfg)
 
 
-def complete_data_dir_path(root, dataset_name):
+def complete_data_dir_path(data_root_dir: str, dataset_name: str):
     # map dataset name to data directory name
     mapping = {"imagenet": "imagenet2012",
                "imagenet_c": "ImageNet-C",
                "imagenet_r": "imagenet-r",
-               "imagenet_k": os.path.join("ImageNet-Sketch", "sketch"),
                "imagenet_a": "imagenet-a",
+               "imagenet_k": os.path.join("ImageNet-Sketch", "sketch"),
+               "imagenet_v2": os.path.join("imagenet-v2", "imagenetv2-matched-frequency-format-val"),
                "imagenet_d": "imagenet-d",      # do not change
                "imagenet_d109": "imagenet-d",   # do not change
                "domainnet126": "DomainNet-126", # directory containing the 6 splits of "cleaned versions" from http://ai.bu.edu/M3SDA/#dataset
-               "office31": "office-31",
-               "visda": "visda-2017",
-               "cifar10": "",  # do not change the following values
-               "cifar10_c": "",
-               "cifar100": "",
-               "cifar100_c": "",
+               "cifar10": "",       # do not change
+               "cifar10_c": "",     # do not change
+               "cifar100": "",      # do not change
+               "cifar100_c": "",    # do not change
                }
-    return os.path.join(root, mapping[dataset_name])
+    assert dataset_name in mapping.keys(),\
+        f"Dataset '{dataset_name}' is not supported! Choose from: {list(mapping.keys())}"
+    return os.path.join(data_root_dir, mapping[dataset_name])
 
 
-def get_num_classes(dataset_name):
+def get_num_classes(dataset_name: str):
     dataset_name2num_classes = {"cifar10": 10, "cifar10_c": 10, "cifar100": 100,  "cifar100_c": 100,
-                                "imagenet": 1000, "imagenet_c": 1000, "imagenet_k": 1000, "imagenet_r": 200,
-                                "imagenet_a": 200, "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
-                                "domainnet126": 126, "office31": 31, "visda": 12
+                                "imagenet": 1000, "imagenet_v2": 1000, "imagenet_c": 1000,
+                                "imagenet_k": 1000, "imagenet_r": 200, "imagenet_a": 200,
+                                "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
+                                "domainnet126": 126,
                                 }
+    assert dataset_name in dataset_name2num_classes.keys(), \
+        f"Dataset '{dataset_name}' is not supported! Choose from: {list(dataset_name2num_classes.keys())}"
     return dataset_name2num_classes[dataset_name]
 
 
-def get_domain_sequence(ckpt_path):
+def ckpt_path_to_domain_seq(ckpt_path: str):
     assert ckpt_path.endswith('.pth') or ckpt_path.endswith('.pt')
-    domain = cfg.CKPT_PATH.replace('.pth', '').split(os.sep)[-1].split('_')[1]
+    domain = ckpt_path.replace('.pth', '').split(os.sep)[-1].split('_')[1]
     mapping = {"real": ["clipart", "painting", "sketch"],
                "clipart": ["sketch", "real", "painting"],
                "painting": ["real", "sketch", "clipart"],
                "sketch": ["painting", "clipart", "real"],
                }
     return mapping[domain]
-
-
-def adaptation_method_lookup(adaptation):
-    lookup_table = {"source": "Norm",
-                    "norm_test": "Norm",
-                    "norm_alpha": "Norm",
-                    "norm_ema": "Norm",
-                    "ttaug": "TTAug",
-                    "memo": "MEMO",
-                    "lame": "LAME",
-                    "tent": "Tent",
-                    "eata": "EATA",
-                    "sar": "SAR",
-                    "adacontrast": "AdaContrast",
-                    "cotta": "CoTTA",
-                    "rotta": "RoTTA",
-                    "gtta": "GTTA",
-                    "rmt": "RMT",
-                    "roid": "ROID"
-                    }
-    assert adaptation in lookup_table.keys(), \
-        f"Adaptation method '{adaptation}' is not supported! Choose from: {list(lookup_table.keys())}"
-    return lookup_table[adaptation]

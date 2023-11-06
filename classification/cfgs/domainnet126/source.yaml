@@ -9,6 +9,6 @@ CORRUPTION:
 MODEL:
   ADAPTATION: source
   ARCH: resnet50
+  CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"
 TEST:
   BATCH_SIZE: 128
-CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"

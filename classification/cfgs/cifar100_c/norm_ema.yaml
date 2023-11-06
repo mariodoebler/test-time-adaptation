@@ -1,5 +1,5 @@
 MODEL:
-  ADAPTATION: norm_ema
+  ADAPTATION: bnema
   ARCH: Hendrycks2020AugMix_ResNeXt
 TEST:
   BATCH_SIZE: 200

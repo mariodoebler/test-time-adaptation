@@ -5,7 +5,9 @@ CORRUPTION:
   TYPE:
     - ""
 MODEL:
-  ADAPTATION: norm_alpha
+  ADAPTATION: bnalpha
   ARCH: resnet50
+BN:
+  ALPHA: 0.1
 TEST:
   BATCH_SIZE: 1

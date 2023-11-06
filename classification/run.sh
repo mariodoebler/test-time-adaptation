@@ -83,7 +83,7 @@ if [[ $setting = "correlated" ]]
 then
   for var in "${cifar10[@]}"; do
     for seed in ${seeds[*]}; do
-      python test_time.py --cfg $var SETTING $setting MODEL.ARCH resnet26_gn CKPT_PATH ./ckpt/resnet26_gn.pth RNG_SEED $seed $options
+      python test_time.py --cfg $var SETTING $setting MODEL.ARCH resnet26_gn MODEL.CKPT_PATH ./ckpt/resnet26_gn.pth RNG_SEED $seed $options
     done
   done
   architectures=(swin_b vit_b_16)
@@ -113,7 +113,7 @@ then
   for arch in ${architectures[*]}; do
     for var in "${imagenet_c[@]}"; do
       for seed in ${seeds[*]}; do
-        python test_time.py --cfg $var SETTING $setting MODEL.ARCH $arch RNG_SEED $seed TEST.ALPHA_DIRICHLET 0.01 $options
+        python test_time.py --cfg $var SETTING $setting MODEL.ARCH $arch RNG_SEED $seed TEST.DELTA_DIRICHLET 0.01 $options
       done
     done
   done
@@ -122,7 +122,7 @@ then
     for ds in ${dataset[*]}; do
       for var in "${imagenet_others[@]}"; do
         for seed in ${seeds[*]}; do
-          python test_time.py --cfg $var SETTING $setting MODEL.ARCH $arch CORRUPTION.DATASET $ds RNG_SEED $seed TEST.ALPHA_DIRICHLET 0.1 $options
+          python test_time.py --cfg $var SETTING $setting MODEL.ARCH $arch CORRUPTION.DATASET $ds RNG_SEED $seed TEST.DELTA_DIRICHLET 0.1 $options
         done
       done
     done

@@ -1,19 +1,22 @@
 import torch
 import logging
 import numpy as np
+from typing import Union
 from datasets.imagenet_subsets import IMAGENET_D_MAPPING
 
 
 logger = logging.getLogger(__name__)
 
 
-def split_results_by_domain(domain_dict, data, predictions):
+def split_results_by_domain(domain_dict: dict, data: list, predictions: torch.tensor):
     """
-    Separate the labels and predictions by domain
-    :param domain_dict: dictionary, where the keys are the domain names and the values are lists with pairs [[label1, prediction1], ...]
-    :param data: list containing [images, labels, domains, ...]
-    :param predictions: tensor containing the predictions of the model
-    :return: updated result dict
+    Separates the label prediction pairs by domain
+    Input:
+        domain_dict: Dictionary, where the keys are the domain names and the values are lists with pairs [[label1, prediction1], ...]
+        data: List containing [images, labels, domains, ...]
+        predictions: Tensor containing the predictions of the model
+    Returns:
+        domain_dict: Updated dictionary containing the domain seperated label prediction pairs
     """
 
     labels, domains = data[1], data[2]
@@ -28,21 +31,22 @@ def split_results_by_domain(domain_dict, data, predictions):
     return domain_dict
 
 
-def eval_domain_dict(domain_dict, domain_seq=None):
+def eval_domain_dict(domain_dict: dict, domain_seq: list):
     """
     Print detailed results for each domain. This is useful for settings where the domains are mixed
-    :param domain_dict: dictionary containing the labels and predictions for each domain
-    :param domain_seq: if specified and the domains are contained in the domain dict, the results will be printed in this order
+    Input:
+        domain_dict: Dictionary containing the labels and predictions for each domain
+        domain_seq: Order to print the results (if all domains are contained in the domain dict)
     """
     correct = []
     num_samples = []
     avg_error_domains = []
-    dom_names = domain_seq if all([dname in domain_seq for dname in domain_dict.keys()]) else domain_dict.keys()
-    logger.info(f"Splitting up the results by domain...")
-    for key in dom_names:
-        content = np.array(domain_dict[key])
-        correct.append((content[:, 0] == content[:, 1]).sum())
-        num_samples.append(content.shape[0])
+    domain_names = domain_seq if all([dname in domain_seq for dname in domain_dict.keys()]) else domain_dict.keys()
+    logger.info(f"Splitting the results by domain...")
+    for key in domain_names:
+        label_prediction_arr = np.array(domain_dict[key])  # rows: samples, cols: (label, prediction)
+        correct.append((label_prediction_arr[:, 0] == label_prediction_arr[:, 1]).sum())
+        num_samples.append(label_prediction_arr.shape[0])
         accuracy = correct[-1] / num_samples[-1]
         error = 1 - accuracy
         avg_error_domains.append(error)
@@ -58,10 +62,7 @@ def get_accuracy(model: torch.nn.Module,
                  domain_name: str,
                  setting: str,
                  domain_dict: dict,
-                 device: torch.device = None):
-
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                 device: Union[str, torch.device]):
 
     correct = 0.
     with torch.no_grad():

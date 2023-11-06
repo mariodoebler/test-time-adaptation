@@ -1,6 +1,7 @@
 MODEL:
-  ADAPTATION: norm_test
+  ADAPTATION: bntest
   ARCH: resnet50
+  CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"
 TEST:
   BATCH_SIZE: 128
 CORRUPTION:
@@ -11,4 +12,3 @@ CORRUPTION:
     - clipart
     - painting
     - sketch
-CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"

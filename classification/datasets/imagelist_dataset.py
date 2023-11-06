@@ -1,5 +1,3 @@
-# Builds upon: https://github.com/DianCh/AdaContrast/blob/master/image_list.py
-
 import os
 import logging
 from PIL import Image
@@ -10,12 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 class ImageList(Dataset):
-    def __init__(
-        self,
-        image_root: str,
-        label_files: Sequence[str],
-        transform: Optional[Callable] = None
-    ):
+    def __init__(self, image_root: str, label_files: Sequence[str], transform: Optional[Callable] = None):
         self.image_root = image_root
         self.label_files = label_files
         self.transform = transform
@@ -25,6 +18,12 @@ class ImageList(Dataset):
             self.samples += self.build_index(label_file=file)
 
     def build_index(self, label_file):
+        """Build a list of <image path, class label, domain name> items.
+        Input:
+            label_file: Path to the file containing the image label pairs
+        Returns:
+            item_list: A list of <image path, class label> items.
+        """
         with open(label_file, "r") as file:
             tmp_items = [line.strip().split() for line in file if line]
 
@@ -37,6 +36,9 @@ class ImageList(Dataset):
 
         return item_list
 
+    def __len__(self):
+        return len(self.samples)
+
     def __getitem__(self, idx):
         img_path, label, domain = self.samples[idx]
         img = Image.open(img_path).convert("RGB")
@@ -44,6 +46,3 @@ class ImageList(Dataset):
             img = self.transform(img)
 
         return img, label, domain, img_path
-
-    def __len__(self):
-        return len(self.samples)

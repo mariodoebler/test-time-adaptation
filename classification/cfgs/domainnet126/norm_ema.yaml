@@ -1,14 +1,14 @@
 MODEL:
-  ADAPTATION: norm_ema
+  ADAPTATION: bnema
   ARCH: resnet50
+  CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"
 TEST:
   BATCH_SIZE: 128
 CORRUPTION:
   DATASET: domainnet126
   SEVERITY:
-  - 5
+    - 5
   TYPE:
     - clipart
     - painting
     - sketch
-CKPT_PATH: "./ckpt/domainnet126/best_real_2020.pth"

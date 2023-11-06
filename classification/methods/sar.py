@@ -5,12 +5,12 @@ Corresponding paper: https://openreview.net/pdf?id=g2YraF75Tj
 
 import torch
 import torch.nn as nn
-import torch.jit
 import numpy as np
 import logging
 import math
 from methods.base import TTAMethod
-
+from utils.registry import ADAPTATION_REGISTRY
+from utils.losses import Entropy
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ def update_ema(ema, new_data, alpha=0.9):
         return alpha * ema + (1 - alpha) * new_data
 
 
+@ADAPTATION_REGISTRY.register()
 class SAR(TTAMethod):
     """SAR online adapts a model by Sharpness-Aware and Reliable entropy minimization during testing.
     Once SARed, a model adapts itself by updating on every forward.
@@ -34,6 +35,9 @@ class SAR(TTAMethod):
         self.reset_constant_em = cfg.SAR.RESET_CONSTANT_EM  # threshold e_m for model recovery scheme
         self.ema = None  # to record the moving average of model output entropy, as model recovery criteria
 
+        # setup loss function
+        self.softmax_entropy = Entropy()
+
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
         """Forward and adapt model input data.
@@ -44,14 +48,14 @@ class SAR(TTAMethod):
         outputs = self.model(imgs_test)
 
         # filtering reliable samples/gradients for further adaptation; first time forward
-        entropys = softmax_entropy(outputs)
+        entropys = self.softmax_entropy(outputs)
         filter_ids_1 = torch.where(entropys < self.margin_e0)
         entropys = entropys[filter_ids_1]
         loss = entropys.mean(0)
         loss.backward()
 
         self.optimizer.first_step(zero_grad=True)  # compute \hat{\epsilon(\Theta)} for first order approximation, Eqn. (4)
-        entropys2 = softmax_entropy(self.model(imgs_test))
+        entropys2 = self.softmax_entropy(self.model(imgs_test))
         entropys2 = entropys2[filter_ids_1]  # second time forward
         filter_ids_2 = torch.where(entropys2 < self.margin_e0)  # here filtering reliable samples again, since model weights have been changed to \Theta+\hat{\epsilon(\Theta)}
         loss_second = entropys2[filter_ids_2].mean(0)
@@ -128,17 +132,12 @@ class SAR(TTAMethod):
                 m.requires_grad_(True)
 
     def setup_optimizer(self):
-        if "vit_" in self.cfg.MODEL.ARCH or "swin_" in self.cfg.MODEL.ARCH:
+        architecture_name = self.cfg.MODEL.ARCH.lower().replace("-", "_")
+        if "vit_" in architecture_name or "swin_" in architecture_name:
             logger.info("Overwriting learning rate for transformers, using a learning rate of 0.001.")
             return SAM(self.params, torch.optim.SGD, lr=0.001, momentum=self.cfg.OPTIM.MOMENTUM)
         else:
             return SAM(self.params, torch.optim.SGD, lr=self.cfg.OPTIM.LR, momentum=self.cfg.OPTIM.MOMENTUM)
-
-
-@torch.jit.script
-def softmax_entropy(x: torch.Tensor) -> torch.Tensor:
-    """Entropy of softmax distribution from logits."""
-    return -(x.softmax(1) * x.log_softmax(1)).sum(1)
 
 
 class SAM(torch.optim.Optimizer):

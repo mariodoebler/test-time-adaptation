@@ -42,7 +42,7 @@ def get_augmentation(aug_type, res_size=256, crop_size=224):
         ]
     elif aug_type == "moco-v2-light":
         transform_list = [
-            transforms.Resize((res_size, res_size)),
+            transforms.Resize(res_size),
             transforms.RandomApply(
                 [transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)],
                 p=0.8,  # not strengthened
@@ -62,7 +62,7 @@ def get_augmentation(aug_type, res_size=256, crop_size=224):
         ]
     elif aug_type == "plain":
         transform_list = [
-            transforms.Resize((res_size, res_size)),
+            transforms.Resize(res_size),
             transforms.RandomCrop(crop_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()
@@ -74,12 +74,6 @@ def get_augmentation(aug_type, res_size=256, crop_size=224):
             transforms.ToTensor()
         ]
     elif aug_type == "test":
-        transform_list = [
-            transforms.Resize((res_size, res_size)),
-            transforms.CenterCrop(crop_size),
-            transforms.ToTensor()
-        ]
-    elif aug_type == "imagenet":
         transform_list = [
             transforms.Resize(res_size),
             transforms.CenterCrop(crop_size),
@@ -104,8 +98,6 @@ def get_augmentation_versions(aug_versions="twss", aug_type="moco-v2", res_size=
             transform_list.append(get_augmentation("plain", res_size=res_size, crop_size=crop_size))
         elif version == "t":
             transform_list.append(get_augmentation("test", res_size=res_size, crop_size=crop_size))
-        elif version == "i":
-            transform_list.append(get_augmentation("imagenet", res_size=res_size, crop_size=crop_size))
         else:
             raise NotImplementedError(f"{version} version not implemented.")
     transform = NCropsTransform(transform_list)

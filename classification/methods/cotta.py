@@ -9,6 +9,7 @@ import torch.jit
 
 from methods.base import TTAMethod
 from augmentations.transforms_cotta import get_tta_transforms
+from utils.registry import ADAPTATION_REGISTRY
 
 
 def update_ema_variables(ema_model, model, alpha_teacher):
@@ -17,6 +18,7 @@ def update_ema_variables(ema_model, model, alpha_teacher):
     return ema_model
 
 
+@ADAPTATION_REGISTRY.register()
 class CoTTA(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
@@ -65,7 +67,7 @@ class CoTTA(TTAMethod):
             outputs_ema = self.model_ema(imgs_test)
 
         # Student update
-        loss = (self.softmax_entropy(outputs, outputs_ema)).mean(0) 
+        loss = self.softmax_entropy(outputs, outputs_ema).mean(0)
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
@@ -75,10 +77,10 @@ class CoTTA(TTAMethod):
 
         # Stochastic restore
         if self.rst > 0.:
-            for nm, m  in self.model.named_modules():
+            for nm, m in self.model.named_modules():
                 for npp, p in m.named_parameters():
                     if npp in ['weight', 'bias'] and p.requires_grad:
-                        mask = (torch.rand(p.shape) < self.rst).float().cuda()
+                        mask = (torch.rand(p.shape) < self.rst).float().to(self.device)
                         with torch.no_grad():
                             p.data = self.model_states[0][f"{nm}.{npp}"] * mask + p * (1.-mask)
         return outputs_ema
@@ -115,10 +117,10 @@ class CoTTA(TTAMethod):
 
 
 @torch.jit.script
-def softmax_entropy_cifar(x, x_ema):# -> torch.Tensor: 
+def softmax_entropy_cifar(x, x_ema) -> torch.Tensor:
     return -(x_ema.softmax(1) * x.log_softmax(1)).sum(1)
 
 
 @torch.jit.script
-def softmax_entropy_imagenet(x, x_ema):# -> torch.Tensor:       
+def softmax_entropy_imagenet(x, x_ema) -> torch.Tensor:
     return -0.5*(x_ema.softmax(1) * x.log_softmax(1)).sum(1)-0.5*(x.softmax(1) * x_ema.log_softmax(1)).sum(1) 

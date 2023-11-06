@@ -1,6 +1,8 @@
 MODEL:
-  ADAPTATION: norm_alpha
+  ADAPTATION: bnalpha
   ARCH: Standard
+BN:
+  ALPHA: 0.1
 TEST:
   BATCH_SIZE: 1
 CORRUPTION:

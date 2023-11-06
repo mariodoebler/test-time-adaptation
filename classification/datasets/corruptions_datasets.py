@@ -3,7 +3,6 @@ import os
 import json
 import torch
 import logging
-from glob import glob
 from typing import Optional, Sequence
 
 from robustbench.data import CORRUPTIONS, PREPROCESSINGS, load_cifar10c, load_cifar100c

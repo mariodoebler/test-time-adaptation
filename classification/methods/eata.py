@@ -129,8 +129,11 @@ class EATA(TTAMethod):
         self.reset_model_probs(updated_probs)
         return outputs
 
-    def reset_steps(self, new_steps):
-        self.steps = new_steps
+    def reset(self):
+        if self.model_states is None or self.optimizer_state is None:
+            raise Exception("cannot reset without saved model/optimizer state")
+        self.load_model_and_optimizer()
+        self.current_model_probs = None
 
     def reset_model_probs(self, probs):
         self.current_model_probs = probs

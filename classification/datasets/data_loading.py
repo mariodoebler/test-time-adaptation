@@ -3,6 +3,7 @@ import logging
 import random
 import numpy as np
 import time
+import webdataset as wds
 
 import torch
 import torchvision
@@ -21,6 +22,10 @@ from augmentations.transforms_adacontrast import get_augmentation_versions, get_
 logger = logging.getLogger(__name__)
 
 
+def identity(x):
+    return x
+
+
 def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transforms.Compose, None]):
     """
     Get the transformation pipeline
@@ -36,8 +41,8 @@ def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transfor
         # adacontrast requires specific transformations
         if dataset_name in ["cifar10", "cifar100", "cifar10_c", "cifar100_c"]:
             transform = get_augmentation_versions(aug_versions="twss", aug_type="moco-v2-light", res_size=(32, 32), crop_size=32)
-        elif dataset_name == "imagenet_c":
-            # note that ImageNet-C is already resized and centre cropped (to size 224)
+        elif dataset_name in ["imagenet_c", "ccc"]:
+            # note that ImageNet-C and CCC are already resized and centre cropped (to size 224)
             transform = get_augmentation_versions(aug_versions="twss", aug_type="moco-v2-light", res_size=(224, 224), crop_size=224)
         elif dataset_name == "domainnet126":
             transform = get_augmentation_versions(aug_versions="twss", aug_type="moco-v2", res_size=(256, 256), crop_size=224)
@@ -60,8 +65,8 @@ def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transfor
             transform = transforms.Compose([transforms.ToTensor()])
         elif dataset_name in ["cifar10_c", "cifar100_c"]:
             transform = None
-        elif dataset_name == "imagenet_c":
-            # note that ImageNet-C is already resized and centre cropped (to size 224)
+        elif dataset_name in ["imagenet_c", "ccc"]:
+            # note that ImageNet-C and CCC are already resized and centre cropped (to size 224)
             transform = transforms.Compose([transforms.ToTensor()])
         elif dataset_name == "domainnet126":
             transform = get_augmentation(aug_type="test", res_size=(256, 256), crop_size=224)
@@ -135,6 +140,15 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
         elif dataset_name in ["imagenet_k", "imagenet_r", "imagenet_a", "imagenet_v2"]:
             test_dataset = torchvision.datasets.ImageFolder(root=data_dir, transform=transform)
 
+        elif dataset_name == "ccc":
+            # url = os.path.join(dset_path, "serial_{{00000..99999}}.tar") Uncoment this to use a local copy of CCC
+            # domain_name = "baseline_20_transition+speed_1000_seed_44" # choose from: baseline_<0/20/40>_transition+speed_<1000/2000/5000>_seed_<43/44/45>
+            url = f'https://mlcloud.uni-tuebingen.de:7443/datasets/CCC/{domain_name}/serial_{{00000..99999}}.tar'
+            test_dataset = (wds.WebDataset(url)
+                    .decode("pil")
+                    .to_tuple("input.jpg", "output.cls")
+                    .map_tuple(transform, identity)
+            )
         elif dataset_name in ["imagenet_d", "imagenet_d109", "domainnet126"]:
             # create the symlinks needed for imagenet-d variants
             if dataset_name in ["imagenet_d", "imagenet_d109"]:
@@ -208,7 +222,7 @@ def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[tran
     """
 
     # create the correct source dataset name
-    src_dataset_name = dataset_name.split("_")[0]
+    src_dataset_name = dataset_name.split("_")[0] if dataset_name != "ccc" else "imagenet"
 
     # complete the data root path to the full dataset path
     data_dir = complete_data_dir_path(data_root_dir, dataset_name=src_dataset_name)
@@ -227,7 +241,7 @@ def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[tran
                                                        train=train_split,
                                                        download=True,
                                                        transform=transform)
-    elif dataset_name in ["imagenet", "imagenet_c", "imagenet_k"]:
+    elif dataset_name in ["imagenet", "imagenet_c", "imagenet_k", "ccc"]:
         split = "train" if train_split else "val"
         source_dataset = torchvision.datasets.ImageNet(root=data_dir,
                                                        split=split,

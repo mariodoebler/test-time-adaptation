@@ -87,5 +87,8 @@ def get_accuracy(model: torch.nn.Module,
             if print_every > 0 and (i+1) % print_every == 0:
                 logger.info(f"#batches={i+1:<6} #samples={num_samples:<9} error = {1 - num_correct / num_samples:.2%}")
 
+            if dataset_name == "ccc" and num_samples >= 7500000:
+                break
+
     accuracy = num_correct.item() / num_samples
     return accuracy, domain_dict, num_samples

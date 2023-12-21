@@ -383,6 +383,7 @@ def complete_data_dir_path(data_root_dir: str, dataset_name: str):
                "cifar10_c": "",     # do not change
                "cifar100": "",      # do not change
                "cifar100_c": "",    # do not change
+               "ccc": "",
                }
     assert dataset_name in mapping.keys(),\
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(mapping.keys())}"
@@ -394,7 +395,7 @@ def get_num_classes(dataset_name: str):
                                 "imagenet": 1000, "imagenet_v2": 1000, "imagenet_c": 1000,
                                 "imagenet_k": 1000, "imagenet_r": 200, "imagenet_a": 200,
                                 "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
-                                "domainnet126": 126,
+                                "domainnet126": 126, "ccc": 1000
                                 }
     assert dataset_name in dataset_name2num_classes.keys(), \
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(dataset_name2num_classes.keys())}"

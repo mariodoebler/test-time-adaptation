@@ -22,6 +22,10 @@ class TTAMethod(nn.Module):
         assert self.steps > 0, "requires >= 1 step(s) to forward and update"
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        # variables for resetting the model after a certain amount of performed update steps
+        self.performed_updates = 0
+        self.reset_after_num_updates = cfg.MODEL.RESET_AFTER_NUM_UPDATES
+
         # configure model and optimizer
         self.configure_model()
         self.params, param_names = self.collect_params()
@@ -64,6 +68,12 @@ class TTAMethod(nn.Module):
                 # update the model, since the complete buffer has changed
                 for _ in range(self.steps):
                     outputs = self.forward_and_adapt(self.input_buffer)
+
+                    # if specified, reset the model after a certain amount of update steps
+                    self.performed_updates += 1
+                    if self.reset_after_num_updates > 0 and self.performed_updates % self.reset_after_num_updates == 0:
+                        self.reset()
+
                 outputs = outputs[self.pointer.long()]
             else:
                 # create the prediction without updating the model
@@ -82,6 +92,11 @@ class TTAMethod(nn.Module):
         else:   # common batch adaptation setting
             for _ in range(self.steps):
                 outputs = self.forward_and_adapt(x)
+
+                # if specified, reset the model after a certain amount of update steps
+                self.performed_updates += 1
+                if self.reset_after_num_updates > 0 and self.performed_updates % self.reset_after_num_updates == 0:
+                    self.reset()
 
         return outputs
 

@@ -77,6 +77,9 @@ _C.MODEL.ADAPTATION = 'source'
 # Reset the model before every new batch
 _C.MODEL.EPISODIC = False
 
+# Reset the model after a certain amount of update steps (e.g., used in RDumb)
+_C.MODEL.RESET_AFTER_NUM_UPDATES = 0
+
 # ----------------------------- Corruption options -------------------------- #
 _C.CORRUPTION = CfgNode()
 

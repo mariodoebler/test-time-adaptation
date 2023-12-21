@@ -38,7 +38,7 @@ class EATA(TTAMethod):
         # setup loss function
         self.softmax_entropy = Entropy()
 
-        if self.fisher_alpha > 0.0:
+        if self.fisher_alpha > 0.0 and self.cfg.SOURCE.NUM_SAMPLES > 0:
             # compute fisher informatrix
             batch_size_src = cfg.TEST.BATCH_SIZE if cfg.TEST.BATCH_SIZE > 1 else cfg.TEST.WINDOW_LENGTH
             _, fisher_loader = get_source_loader(dataset_name=cfg.CORRUPTION.DATASET,

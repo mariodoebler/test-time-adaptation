@@ -218,6 +218,12 @@ _C.ROTTA.ALPHA = 0.05
 _C.ROTTA.LAMBDA_T = 1.0
 _C.ROTTA.LAMBDA_U = 1.0
 
+# --------------------------------- RPL options ---------------------------- #
+_C.RPL = CfgNode()
+
+# Q value of GCE loss
+_C.RPL.Q = 0.8
+
 # --------------------------------- ROID options ---------------------------- #
 _C.ROID = CfgNode()
 

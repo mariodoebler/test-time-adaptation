@@ -119,6 +119,7 @@ dependencies:
     - traitlets==5.1.0
     - urllib3==1.25.11
     - wcwidth==0.2.5
+    - webdataset==0.2.86
     - yacs==0.1.8
     - yapf==0.31.0
     - yattag==1.14.0

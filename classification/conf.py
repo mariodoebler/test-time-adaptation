@@ -41,6 +41,10 @@ _C.LOG_DEST = "log.txt"
 # Log datetime
 _C.LOG_TIME = ''
 
+# Enables printing intermediate results every x batches.
+# Default -1 corresponds to no intermediate results
+_C.PRINT_EVERY = -1
+
 # Seed to use. If None, seed is not set!
 # Note that non-determinism is still present due to non-deterministic GPU ops.
 _C.RNG_SEED = 1
@@ -65,7 +69,7 @@ _C.MODEL = CfgNode()
 _C.MODEL.ARCH = 'Standard'
 
 # Type of pre-trained weights
-# For torchvision models, see for example: https://pytorch.org/vision/0.14/models.html
+# For torchvision models see: https://pytorch.org/vision/0.14/models.html
 _C.MODEL.WEIGHTS = "IMAGENET1K_V1"
 
 # Path to a specific checkpoint
@@ -115,7 +119,7 @@ _C.OPTIM.LR = 1e-3
 # Optimizer choices: Adam, SGD
 _C.OPTIM.METHOD = 'Adam'
 
-# Beta1 of Adam optimizer
+# Beta1 for Adam based optimizers
 _C.OPTIM.BETA = 0.9
 
 # Momentum

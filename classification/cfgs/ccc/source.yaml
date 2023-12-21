@@ -1,0 +1,11 @@
+CORRUPTION:
+  DATASET: ccc
+  SEVERITY:
+    - 5
+  TYPE:
+    - baseline_20_transition+speed_1000_seed_44
+MODEL:
+  ADAPTATION: source
+  ARCH: resnet50
+TEST:
+  BATCH_SIZE: 64

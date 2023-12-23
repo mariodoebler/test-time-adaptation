@@ -12,9 +12,11 @@ from methods.tent import Tent
 from methods.eata import EATA
 from methods.sar import SAR
 from methods.roid import ROID
+from methods.santa import SANTA
 
 __all__ = [
     'Source', 'BNTest', 'BNAlpha', 'BNEMA', 'TTAug',
     'CoTTA', 'RMT', 'RoTTA', 'AdaContrast', 'GTTA',
-    'LAME', 'MEMO', 'Tent', 'EATA', 'SAR', 'ROID'
+    'LAME', 'MEMO', 'Tent', 'EATA', 'SAR', 'ROID',
+    'SANTA'
 ]

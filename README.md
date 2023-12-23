@@ -27,11 +27,12 @@ This is an open source online test-time adaptation repository based on PyTorch. 
 ```
 
 ```
-@article{marsden2023universal,
+@inproceedings{marsden2024universal,
   title={Universal Test-time Adaptation through Weight Ensembling, Diversity Weighting, and Prior Correction},
   author={Marsden, Robert A and D{\"o}bler, Mario and Yang, Bin},
-  journal={arXiv preprint arXiv:2306.00650},
-  year={2023}
+  booktitle={Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision},
+  pages={2555--2565},
+  year={2024}
 }
 ```
 

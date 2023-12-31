@@ -12,9 +12,10 @@ from models.model import split_up_model
 from augmentations.transforms_cotta import get_tta_transforms
 from datasets.data_loading import get_source_loader
 from utils.registry import ADAPTATION_REGISTRY
-from utils.losses import SymmetricCrossEntropy, AugCrossEntropy
+from utils.losses import AugCrossEntropy
 
 logger = logging.getLogger(__name__)
+
 
 @ADAPTATION_REGISTRY.register()
 class SANTA(TTAMethod):
@@ -44,7 +45,6 @@ class SANTA(TTAMethod):
         self.tta_transform = get_tta_transforms(self.dataset_name)
 
         # setup loss functions
-        # self.symmetric_cross_entropy = SymmetricCrossEntropy()
         self.aug_entropy = AugCrossEntropy()
 
         # Setup Anchor model
@@ -175,7 +175,7 @@ class SANTA(TTAMethod):
         outputs_test = self.classifier(features_test)
 
         # forward augmented test data
-        features_aug_test = self.feature_extractor(self.tta_transform((imgs_test)))
+        features_aug_test = self.feature_extractor(self.tta_transform(imgs_test))
         outputs_aug_test = self.classifier(features_aug_test)
 
         # forward original test data through the anchor model
@@ -197,14 +197,11 @@ class SANTA(TTAMethod):
                               features_aug_test.view(features_test.shape[0], 1, features_test.shape[1])], dim=1)
         loss_contrastive = self.contrastive_loss(features=features, labels=None)
 
-        # loss_self_training = (0.5 * self.symmetric_cross_entropy(outputs_test, outputs_anchor) + 0.5 * self.symmetric_cross_entropy(outputs_aug_test, outputs_anchor)).mean(0)
         loss_self_training = self.aug_entropy(outputs_test, outputs_aug_test, outputs_anchor).mean(0)
         loss_trg = self.lambda_ce_trg * loss_self_training + self.lambda_cont * loss_contrastive
         loss_trg.backward()
-
         self.optimizer.step()
 
-        # create and return the ensemble prediction
         return outputs_test
 
     def configure_model(self):

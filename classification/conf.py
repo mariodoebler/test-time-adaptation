@@ -177,6 +177,12 @@ _C.RMT.LAMBDA_CE_TRG = 1.0          # Lambda for self-training
 _C.RMT.LAMBDA_CONT = 1.0            # Lambda for contrastive learning
 _C.RMT.NUM_SAMPLES_WARM_UP = 50000  # Number of samples used during the mean teacher warm-up
 
+# --------------------------------- SANTA options ----------------------------- #
+_C.SANTA = CfgNode()
+
+_C.SANTA.LAMBDA_CE_TRG = 1.0          # Lambda for self-training
+_C.SANTA.LAMBDA_CONT = 1.0            # Lambda for contrastive learning
+
 # --------------------------------- AdaContrast options --------------------- #
 _C.ADACONTRAST = CfgNode()
 

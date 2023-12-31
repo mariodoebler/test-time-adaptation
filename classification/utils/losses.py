@@ -18,6 +18,15 @@ class SymmetricCrossEntropy(nn.Module):
     def __call__(self, x, x_ema):
         return -(1-self.alpha) * (x_ema.softmax(1) * x.log_softmax(1)).sum(1) - self.alpha * (x.softmax(1) * x_ema.log_softmax(1)).sum(1)
 
+class AugCrossEntropy(nn.Module):
+    def __init__(self, alpha=0.5):
+        super(AugCrossEntropy, self).__init__()
+        self.alpha = alpha
+
+    def __call__(self, x, x_aug, x_ema):
+        return -(1-self.alpha) * (x.softmax(1) * x_ema.log_softmax(1)).sum(1) \
+                  - self.alpha * (x_aug.softmax(1) * x_ema.log_softmax(1)).sum(1)
+
 
 class SoftLikelihoodRatio(nn.Module):
     def __init__(self, clip=0.99, eps=1e-5):

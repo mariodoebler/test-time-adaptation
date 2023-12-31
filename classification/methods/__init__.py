@@ -13,9 +13,10 @@ from methods.eata import EATA
 from methods.sar import SAR
 from methods.rpl import RPL
 from methods.roid import ROID
+from methods.santa import SANTA
 
 __all__ = [
     'Source', 'BNTest', 'BNAlpha', 'BNEMA', 'TTAug',
-    'CoTTA', 'RMT', 'RoTTA', 'AdaContrast', 'GTTA',
+    'CoTTA', 'RMT', 'SANTA', 'RoTTA', 'AdaContrast', 'GTTA',
     'LAME', 'MEMO', 'Tent', 'EATA', 'SAR', 'RPL', 'ROID'
 ]

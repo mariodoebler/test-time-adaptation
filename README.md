@@ -92,7 +92,7 @@ This repository allows to study a wide range of different datasets, models, sett
   [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
   [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
   [SAR](https://arxiv.org/abs/2302.12400), [RoTTA](https://arxiv.org/abs/2303.13899), [RPL](https://arxiv.org/abs/2104.12928),
-  [RDumb](https://arxiv.org/abs/2306.05401),
+  [RDumb](https://arxiv.org/abs/2306.05401), [SANTA](https://openreview.net/forum?id=V7guVYzvE4),
   [GTTA](https://arxiv.org/abs/2208.07736), [RMT](https://arxiv.org/abs/2211.13081), and [ROID](https://arxiv.org/abs/2306.00650).
 
 

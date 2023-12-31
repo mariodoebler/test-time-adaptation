@@ -112,6 +112,12 @@ class ROID(TTAMethod):
         else:
             return outputs
 
+    def reset(self):
+        if self.model_states is None or self.optimizer_state is None:
+            raise Exception("cannot reset without saved model/optimizer state")
+        self.load_model_and_optimizer()
+        self.class_probs_ema = 1 / self.num_classes * torch.ones(self.num_classes).to(self.device)
+
     def collect_params(self):
         """Collect the affine scale + shift parameters from normalization layers.
         Walk the model's modules and collect all normalization parameters.

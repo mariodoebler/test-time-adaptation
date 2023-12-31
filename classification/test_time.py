@@ -73,7 +73,7 @@ def evaluate(description):
             try:
                 model.reset()
                 logger.info("resetting model")
-            except:
+            except AttributeError:
                 logger.warning("not resetting model")
         else:
             logger.warning("not resetting model")
@@ -95,20 +95,21 @@ def evaluate(description):
                                                workers=min(cfg.TEST.NUM_WORKERS, os.cpu_count()))
 
             # evaluate the model
-            acc, domain_dict = get_accuracy(model,
-                                            data_loader=test_data_loader,
-                                            dataset_name=cfg.CORRUPTION.DATASET,
-                                            domain_name=domain_name,
-                                            setting=cfg.SETTING,
-                                            domain_dict=domain_dict,
-                                            device=device)
+            acc, domain_dict, num_samples = get_accuracy(model,
+                                                         data_loader=test_data_loader,
+                                                         dataset_name=cfg.CORRUPTION.DATASET,
+                                                         domain_name=domain_name,
+                                                         setting=cfg.SETTING,
+                                                         domain_dict=domain_dict,
+                                                         print_every=cfg.PRINT_EVERY,
+                                                         device=device)
 
             err = 1. - acc
             errs.append(err)
             if severity == 5 and domain_name != "none":
                 errs_5.append(err)
 
-            logger.info(f"{cfg.CORRUPTION.DATASET} error % [{domain_name}{severity}][#samples={len(test_data_loader.dataset)}]: {err:.2%}")
+            logger.info(f"{cfg.CORRUPTION.DATASET} error % [{domain_name}{severity}][#samples={num_samples}]: {err:.2%}")
 
     if len(errs_5) > 0:
         logger.info(f"mean error: {np.mean(errs):.2%}, mean error at 5: {np.mean(errs_5):.2%}")

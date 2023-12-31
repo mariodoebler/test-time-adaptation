@@ -1,0 +1,22 @@
+CORRUPTION:
+  DATASET: ccc
+  SEVERITY:
+    - 5
+  TYPE:
+    - baseline_20_transition+speed_1000_seed_44
+MODEL:
+  ADAPTATION: cotta
+  ARCH: resnet50
+OPTIM:
+  METHOD: SGD
+  STEPS: 1
+  BETA: 0.9
+  LR: 0.01
+  WD: 0.0
+M_TEACHER:
+  MOMENTUM: 0.999
+COTTA:
+  RST: 0.001
+  AP: 0.1
+TEST:
+  BATCH_SIZE: 64

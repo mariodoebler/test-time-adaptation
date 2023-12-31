@@ -27,11 +27,12 @@ This is an open source online test-time adaptation repository based on PyTorch. 
 ```
 
 ```
-@article{marsden2023universal,
+@inproceedings{marsden2024universal,
   title={Universal Test-time Adaptation through Weight Ensembling, Diversity Weighting, and Prior Correction},
   author={Marsden, Robert A and D{\"o}bler, Mario and Yang, Bin},
-  journal={arXiv preprint arXiv:2306.00650},
-  year={2023}
+  booktitle={Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision},
+  pages={2555--2565},
+  year={2024}
 }
 ```
 
@@ -48,7 +49,10 @@ conda activate tta
 ```
 
 ## Classification
-Our benchmark, including the **evaluation protocol** and **results** is located [here](classification/benchmark.md). More information can be found in the [paper](https://arxiv.org/abs/2306.00650).
+This repository contains an extensive collection of different methods, datasets and settings,
+which we evaluate in a comprehensive benchmark. We provide detailed results for each method [here](https://docs.google.com/spreadsheets/d/1xR-3df5xMMsEcMHe4Vo495E35RrIPs5abcR7Pztvucw/edit?usp=drive_link),
+which is updated regularly as new methods or datasets are added to the repository.
+Further information on the settings can also be found in our [paper](https://arxiv.org/abs/2306.00650).
 
 <details open>
 <summary>Features</summary>
@@ -66,6 +70,7 @@ This repository allows to study a wide range of different datasets, models, sett
   - `imagenet_d` [ImageNet-D](https://github.com/bethgelab/robustness/tree/main/examples/imagenet_d)
   - `imagenet_d109`
   - `domainnet126` [DomainNet (cleaned)](http://ai.bu.edu/M3SDA/)
+  - `Continually Changing Corruptions` [CCC](https://github.com/oripress/CCC)
 
 - **Models**
   - For adapting to ImageNet variations, all pre-trained models available in [Torchvision](https://pytorch.org/vision/0.14/models.html) or [timm](https://github.com/huggingface/pytorch-image-models/tree/v0.6.13) can be used.
@@ -86,7 +91,8 @@ This repository allows to study a wide range of different datasets, models, sett
   - The repository currently supports the following methods: BN-0 (source), BN-alpha, BN-1, [TENT](https://openreview.net/pdf?id=uXl3bZLkr3c),
   [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
   [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
-  [SAR](https://arxiv.org/pdf/2302.12400.pdf), [RoTTA](https://arxiv.org/pdf/2303.13899.pdf),
+  [SAR](https://arxiv.org/abs/2302.12400), [RoTTA](https://arxiv.org/abs/2303.13899), [RPL](https://arxiv.org/abs/2104.12928),
+  [RDumb](https://arxiv.org/abs/2306.05401),
   [GTTA](https://arxiv.org/abs/2208.07736), [RMT](https://arxiv.org/abs/2211.13081), and [ROID](https://arxiv.org/abs/2306.00650).
 
 
@@ -107,6 +113,7 @@ To run one of the following benchmarks, the corresponding datasets need to be do
 - *ImageNet-to-ImageNet-D*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php). For [ImageNet-D](https://openreview.net/pdf?id=LiC2vmzbpMO), see the download instructions for DomainNet-126 below. ImageNet-D is created by symlinks, which are set up at the first use.
 - *ImageNet-to-ImageNet-D109*: see instructions for DomainNet-126 below.
 - *DomainNet-126*: download the 6 splits of the [cleaned version](http://ai.bu.edu/M3SDA/). Following [MME](https://arxiv.org/abs/1904.06487), DomainNet-126 only uses a subset that contains 126 classes from 4 domains.
+- *ImageNet-to-CCC*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php). CCC is integrated as a webdataset and does not need to be downloaded! Please note that it cannot be combined with settings such as correlated.
 
 Next, specify the root folder for all datasets `_C.DATA_DIR = "./data"` in the file `conf.py`. For the individual datasets, the directory names are specified in `conf.py` as a dictionary (see function `complete_data_dir_path`). In case your directory names deviate from the ones specified in the mapping dictionary, you can simply modify them.
 
@@ -115,12 +122,12 @@ Next, specify the root folder for all datasets `_C.DATA_DIR = "./data"` in the f
 
 We provide config files for all experiments and methods. Simply run the following Python file with the corresponding config file.
 ```bash
-python test_time.py --cfg cfgs/[cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/eata/cotta/adacontrast/lame/sar/rotta/gtta/rmt/roid].yaml
+python test_time.py --cfg cfgs/[ccc/cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/cotta/rotta/adacontrast/lame/gtta/rmt/roid].yaml
 ```
 
 For imagenet_others, the argument CORRUPTION.DATASET has to be passed:
 ```bash
-python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/eata/cotta/adacontrast/lame/sar/rotta/gtta/rmt/roid].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_v2/imagenet_d109]
+python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/cotta/rotta/adacontrast/lame/gtta/rmt/roid].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_v2/imagenet_d109]
 ```
 
 E.g., to run ROID for the ImageNet-to-ImageNet-R benchmark, run the following command.
@@ -130,7 +137,7 @@ python test_time.py --cfg cfgs/imagenet_others/roid.yaml CORRUPTION.DATASET imag
 
 Alternatively, you can reproduce our experiments by running the `run.sh` in the subdirectory `classification`. For the different settings, modify `setting` within `run.sh`.
 
-To run the different continual DomainNet-126 sequences, you have to pass the `MODEL.CKPT_PATH` argument. When not specifying a `MODEL.CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
+To run the different continual DomainNet-126 sequences, you have to pass the `MODEL.CKPT_PATH` argument. When not specifying a `CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
 The checkpoints are provided by [AdaContrast](https://github.com/DianCh/AdaContrast) and can be downloaded [here](https://drive.google.com/drive/folders/1OOSzrl6kzxIlEhNAK168dPXJcHwJ1A2X). Structurally, it is best to download them into the directory `./ckpt/domainnet126`.
 ```bash
 python test_time.py --cfg cfgs/domainnet126/rmt.yaml MODEL.CKPT_PATH ./ckpt/domainnet126/best_clipart_2020.pth
@@ -157,6 +164,7 @@ python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WE
 + MEMO [official](https://github.com/zhangmarvin/memo)
 + RoTTA [official](https://github.com/BIT-DA/RoTTA)
 + SAR [official](https://github.com/mr-eggplant/SAR)
++ RDumb [official](https://github.com/oripress/CCC)
 
 
 ## Segmentation
@@ -191,15 +199,6 @@ We provide the different datasets of CarlaTTA as individual zip-files on Google-
 + clear-highway [download](https://drive.google.com/file/d/1lZlxwBVBSBAguONX9K6gI2NlWqAxECvB/view?usp=sharing)
 + highway [download](https://drive.google.com/file/d/1Q_3iOuDK4t-W3lvsHwRddDqHTE8GEAIj/view?usp=sharing)
 
-If you find our dataset CarlaTTA useful, please cite our work.
-```
-@article{marsden2022gradual,
-  title={Gradual test-time adaptation by self-training and style transfer},
-  author={Marsden, Robert A and D{\"o}bler, Mario and Yang, Bin},
-  journal={arXiv preprint arXiv:2208.07736},
-  year={2022}
-}
-```
 
 ### Acknowledgements
 + Segmentation model is from AdaptSegNet [official](https://github.com/wasidennis/AdaptSegNet)

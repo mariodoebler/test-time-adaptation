@@ -41,6 +41,10 @@ _C.LOG_DEST = "log.txt"
 # Log datetime
 _C.LOG_TIME = ''
 
+# Enables printing intermediate results every x batches.
+# Default -1 corresponds to no intermediate results
+_C.PRINT_EVERY = -1
+
 # Seed to use. If None, seed is not set!
 # Note that non-determinism is still present due to non-deterministic GPU ops.
 _C.RNG_SEED = 1
@@ -65,7 +69,7 @@ _C.MODEL = CfgNode()
 _C.MODEL.ARCH = 'Standard'
 
 # Type of pre-trained weights
-# For torchvision models, see for example: https://pytorch.org/vision/0.14/models.html
+# For torchvision models see: https://pytorch.org/vision/0.14/models.html
 _C.MODEL.WEIGHTS = "IMAGENET1K_V1"
 
 # Path to a specific checkpoint
@@ -76,6 +80,9 @@ _C.MODEL.ADAPTATION = 'source'
 
 # Reset the model before every new batch
 _C.MODEL.EPISODIC = False
+
+# Reset the model after a certain amount of update steps (e.g., used in RDumb)
+_C.MODEL.RESET_AFTER_NUM_UPDATES = 0
 
 # ----------------------------- Corruption options -------------------------- #
 _C.CORRUPTION = CfgNode()
@@ -112,7 +119,7 @@ _C.OPTIM.LR = 1e-3
 # Optimizer choices: Adam, SGD
 _C.OPTIM.METHOD = 'Adam'
 
-# Beta1 of Adam optimizer
+# Beta1 for Adam based optimizers
 _C.OPTIM.BETA = 0.9
 
 # Momentum
@@ -223,6 +230,12 @@ _C.ROTTA.NU = 0.001
 _C.ROTTA.ALPHA = 0.05
 _C.ROTTA.LAMBDA_T = 1.0
 _C.ROTTA.LAMBDA_U = 1.0
+
+# --------------------------------- RPL options ---------------------------- #
+_C.RPL = CfgNode()
+
+# Q value of GCE loss
+_C.RPL.Q = 0.8
 
 # --------------------------------- ROID options ---------------------------- #
 _C.ROID = CfgNode()
@@ -376,6 +389,7 @@ def complete_data_dir_path(data_root_dir: str, dataset_name: str):
                "cifar10_c": "",     # do not change
                "cifar100": "",      # do not change
                "cifar100_c": "",    # do not change
+               "ccc": "",
                }
     assert dataset_name in mapping.keys(),\
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(mapping.keys())}"
@@ -387,7 +401,7 @@ def get_num_classes(dataset_name: str):
                                 "imagenet": 1000, "imagenet_v2": 1000, "imagenet_c": 1000,
                                 "imagenet_k": 1000, "imagenet_r": 200, "imagenet_a": 200,
                                 "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
-                                "domainnet126": 126,
+                                "domainnet126": 126, "ccc": 1000
                                 }
     assert dataset_name in dataset_name2num_classes.keys(), \
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(dataset_name2num_classes.keys())}"

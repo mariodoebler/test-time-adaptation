@@ -62,9 +62,11 @@ def get_accuracy(model: torch.nn.Module,
                  domain_name: str,
                  setting: str,
                  domain_dict: dict,
+                 print_every: int,
                  device: Union[str, torch.device]):
 
-    correct = 0.
+    num_correct = 0.
+    num_samples = 0
     with torch.no_grad():
         for i, data in enumerate(data_loader):
             imgs, labels = data[0], data[1]
@@ -75,10 +77,18 @@ def get_accuracy(model: torch.nn.Module,
                 mapping_vector = list(IMAGENET_D_MAPPING.values())
                 predictions = torch.tensor([mapping_vector[pred] for pred in predictions], device=device)
 
-            correct += (predictions == labels.to(device)).float().sum()
+            num_correct += (predictions == labels.to(device)).float().sum()
 
             if "mixed_domains" in setting and len(data) >= 3:
                 domain_dict = split_results_by_domain(domain_dict, data, predictions)
 
-    accuracy = correct.item() / len(data_loader.dataset)
-    return accuracy, domain_dict
+            # track progress
+            num_samples += imgs[0].shape[0] if isinstance(imgs, list) else imgs.shape[0]
+            if print_every > 0 and (i+1) % print_every == 0:
+                logger.info(f"#batches={i+1:<6} #samples={num_samples:<9} error = {1 - num_correct / num_samples:.2%}")
+
+            if dataset_name == "ccc" and num_samples >= 7500000:
+                break
+
+    accuracy = num_correct.item() / num_samples
+    return accuracy, domain_dict, num_samples

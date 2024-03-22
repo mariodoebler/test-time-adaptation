@@ -203,8 +203,31 @@ class AdaContrast(TTAMethod):
         _, outputs = self.model(images_test, cls_only=True)
         return outputs
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
+    @torch.enable_grad()
     def forward_and_adapt(self, x):
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()    
+
+        _, images_w, images_q, images_k = x
+
+        # use slow feature to update neighbor space
+        with torch.no_grad():
+            feats_w, logits_w = self.model.momentum_model(images_w, return_feats=True)
+
+            self.update_labels(feats_w, logits_w)
+        return outputs
+
+    def loss_calculation(self, x):
         _, images_w, images_q, images_k = x
 
         self.model.train()
@@ -251,17 +274,7 @@ class AdaContrast(TTAMethod):
             + self.eta * loss_div
         )
 
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-        # use slow feature to update neighbor space
-        with torch.no_grad():
-            feats_w, logits_w = self.model.momentum_model(images_w, return_feats=True)
-
-        self.update_labels(feats_w, logits_w)
-
-        return logits_q
+        return None, loss
 
     @torch.no_grad()
     def forward_sliding_window(self, x):

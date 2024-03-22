@@ -42,7 +42,7 @@ class SANTA(TTAMethod):
         arch_name = cfg.MODEL.ARCH
         ckpt_path = cfg.MODEL.CKPT_PATH
 
-        self.tta_transform = get_tta_transforms(self.dataset_name)
+        self.tta_transform = get_tta_transforms(self.img_size)
 
         # setup loss functions
         self.aug_entropy = AugCrossEntropy()
@@ -164,11 +164,8 @@ class SANTA(TTAMethod):
         loss = loss.view(anchor_count, batch_size).mean()
         return loss
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
-    def forward_and_adapt(self, x):
+    def loss_calculation(self, x):
         imgs_test = x[0]
-
-        self.optimizer.zero_grad()
 
         # forward original test data
         features_test = self.feature_extractor(imgs_test)
@@ -198,11 +195,25 @@ class SANTA(TTAMethod):
         loss_contrastive = self.contrastive_loss(features=features, labels=None)
 
         loss_self_training = self.aug_entropy(outputs_test, outputs_aug_test, outputs_anchor).mean(0)
-        loss_trg = self.lambda_ce_trg * loss_self_training + self.lambda_cont * loss_contrastive
-        loss_trg.backward()
-        self.optimizer.step()
-
-        return outputs_test
+        loss = self.lambda_ce_trg * loss_self_training + self.lambda_cont * loss_contrastive
+        
+        return outputs_test, loss
+        
+    @torch.enable_grad()
+    def forward_and_adapt(self, x):
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+        return outputs
 
     def configure_model(self):
         """Configure model for use with tent."""

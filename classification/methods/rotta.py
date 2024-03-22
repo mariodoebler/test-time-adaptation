@@ -40,6 +40,21 @@ class RoTTA(TTAMethod):
         # create the test-time transformations
         self.transform = get_tta_transforms(self.img_size)
 
+    def loss_calculation(self):
+        self.model.train()
+        self.model_ema.train()
+        # get memory data
+        sup_data, ages = self.mem.get_memory()
+        loss_sup = torch.tensor([(float('nan'))])
+        if len(sup_data) > 0:
+            sup_data = torch.stack(sup_data)
+            strong_sup_aug = self.transform(sup_data)
+            ema_sup_out = self.model_ema(sup_data)
+            stu_sup_out = self.model(strong_sup_aug)
+            instance_weight = timeliness_reweighting(ages, device=self.device)
+            loss_sup = (softmax_cross_entropy(stu_sup_out, ema_sup_out) * instance_weight).mean()
+        return loss_sup
+
     @torch.enable_grad()
     def forward_and_adapt(self, x):
         imgs_test = x[0]
@@ -61,37 +76,28 @@ class RoTTA(TTAMethod):
             self.current_instance += 1
 
             if self.current_instance % self.update_frequency == 0:
-                self.update_model()
+                if self.mixed_precision and self.device == "cuda":
+                    with torch.cuda.amp.autocast():
+                        loss = self.loss_calculation()
+                    self.scaler.scale(loss).backward()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad()
+                else:
+                    loss = self.loss_calculation(x)
+                    loss.backward()
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+
+                self.model_ema = ema_update_model(
+                    model_to_update=self.model_ema,
+                    model_to_merge=self.model,
+                    momentum=self.nu,
+                    device=self.device,
+                    update_all=True
+                )
 
         return ema_out
-
-    def update_model(self):
-        self.model.train()
-        self.model_ema.train()
-        # get memory data
-        sup_data, ages = self.mem.get_memory()
-        l_sup = None
-        if len(sup_data) > 0:
-            sup_data = torch.stack(sup_data)
-            strong_sup_aug = self.transform(sup_data)
-            ema_sup_out = self.model_ema(sup_data)
-            stu_sup_out = self.model(strong_sup_aug)
-            instance_weight = timeliness_reweighting(ages, device=self.device)
-            l_sup = (softmax_cross_entropy(stu_sup_out, ema_sup_out) * instance_weight).mean()
-
-        l = l_sup
-        if l is not None:
-            self.optimizer.zero_grad()
-            l.backward()
-            self.optimizer.step()
-
-            self.model_ema = ema_update_model(
-                model_to_update=self.model_ema,
-                model_to_merge=self.model,
-                momentum=self.nu,
-                device=self.device,
-                update_all=True
-            )
 
     def reset(self):
         if self.model_states is None or self.optimizer_state is None:

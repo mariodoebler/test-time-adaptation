@@ -17,15 +17,27 @@ class RPL(TTAMethod):
         super().__init__(cfg, model, num_classes)
         self.gce = GeneralizedCrossEntropy(q=self.cfg.RPL.Q)
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
-    def forward_and_adapt(self, x):
+    def loss_calculation(self, x):
         imgs_test = x[0]
         outputs = self.model(imgs_test)
         labels = outputs.argmax(dim=1)
         loss = self.gce(outputs, targets=labels).mean(0)
-        loss.backward()
-        self.optimizer.step()
-        self.optimizer.zero_grad(set_to_none=True)
+        return outputs, loss
+
+    @torch.enable_grad()
+    def forward_and_adapt(self, x):
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()
         return outputs
 
     def collect_params(self):

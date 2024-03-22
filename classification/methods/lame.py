@@ -8,7 +8,7 @@ import torch.jit
 import logging
 import torch.nn.functional as F
 from copy import deepcopy
-from methods.base import TTAMethod
+from methods.base import TTAMethod, forward_decorator
 from models.model import split_up_model
 from utils.registry import ADAPTATION_REGISTRY
 
@@ -29,7 +29,7 @@ class LAME(TTAMethod):
         self.feature_extractor, self.classifier = split_up_model(self.model, cfg.MODEL.ARCH, self.dataset_name)
         self.model_state, _ = self.copy_model_and_optimizer()
 
-    @torch.no_grad()  # ensure grads in possible no grad context for testing
+    @forward_decorator
     def forward_and_adapt(self, x):
         imgs_test = x[0]
 

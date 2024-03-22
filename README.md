@@ -92,7 +92,7 @@ This repository allows to study a wide range of different datasets, models, sett
   [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
   [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
   [SAR](https://arxiv.org/abs/2302.12400), [RoTTA](https://arxiv.org/abs/2303.13899), [RPL](https://arxiv.org/abs/2104.12928),
-  [RDumb](https://arxiv.org/abs/2306.05401), [SANTA](https://openreview.net/forum?id=V7guVYzvE4),
+  [RDumb](https://arxiv.org/abs/2306.05401), [SANTA](https://openreview.net/forum?id=V7guVYzvE4), [DeYO](https://arxiv.org/abs/2403.07366), [CMF](https://openreview.net/forum?id=BllUWdpIOA)
   [GTTA](https://arxiv.org/abs/2208.07736), [RMT](https://arxiv.org/abs/2211.13081), and [ROID](https://arxiv.org/abs/2306.00650).
 
 
@@ -122,12 +122,12 @@ Next, specify the root folder for all datasets `_C.DATA_DIR = "./data"` in the f
 
 We provide config files for all experiments and methods. Simply run the following Python file with the corresponding config file.
 ```bash
-python test_time.py --cfg cfgs/[ccc/cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/cotta/rotta/adacontrast/lame/gtta/rmt/roid].yaml
+python test_time.py --cfg cfgs/[ccc/cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/deyo/cotta/rotta/adacontrast/lame/gtta/rmt/roid/cmf].yaml
 ```
 
 For imagenet_others, the argument CORRUPTION.DATASET has to be passed:
 ```bash
-python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/cotta/rotta/adacontrast/lame/gtta/rmt/roid].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_v2/imagenet_d109]
+python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/deyo/cotta/rotta/adacontrast/lame/gtta/rmt/roid/cmf].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_v2/imagenet_d109]
 ```
 
 E.g., to run ROID for the ImageNet-to-ImageNet-R benchmark, run the following command.
@@ -153,6 +153,9 @@ Further models and initializations can be found [here (torchvision)](https://pyt
 python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WEIGHTS IMAGENET1K_V1 SETTING reset_each_shift
 ```
 
+### Mixed Precision
+We support for most methods automatic mixed precision updates with loss scaling. By default mixed precision is set to false. To activate mixed precision set the argument `MIXED_PRECISION True`.
+
 
 ### Acknowledgements
 + Robustbench [official](https://github.com/RobustBench/robustbench)
@@ -165,6 +168,7 @@ python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WE
 + RoTTA [official](https://github.com/BIT-DA/RoTTA)
 + SAR [official](https://github.com/mr-eggplant/SAR)
 + RDumb [official](https://github.com/oripress/CCC)
++ DeYO [official](https://whitesnowdrop.github.io/DeYO/)
 
 
 ## Segmentation

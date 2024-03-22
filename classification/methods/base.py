@@ -5,6 +5,7 @@ from torch.nn.utils.weight_norm import WeightNorm
 from torchvision import transforms
 
 from copy import deepcopy
+from functools import wraps
 from models.model import ResNetDomainNet126
 
 
@@ -57,6 +58,10 @@ class TTAMethod(nn.Module):
         # then skipping the state copy would save memory
         self.models = [self.model]
         self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
+
+        # setup for mixed-precision or single precision
+        self.mixed_precision = cfg.MIXED_PRECISION
+        self.scaler = torch.cuda.amp.GradScaler() if cfg.MIXED_PRECISION else None
 
     def forward(self, x):
         if self.episodic:
@@ -114,7 +119,12 @@ class TTAMethod(nn.Module):
 
         return outputs
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
+    def loss_calculation(self, x):
+        """
+        Loss calculation.
+        """
+        raise NotImplementedError
+
     def forward_and_adapt(self, x):
         """
         Forward and adapt the model on a batch of data.
@@ -155,6 +165,11 @@ class TTAMethod(nn.Module):
                                     lr=self.cfg.OPTIM.LR,
                                     betas=(self.cfg.OPTIM.BETA, 0.999),
                                     weight_decay=self.cfg.OPTIM.WD)
+        elif self.cfg.OPTIM.METHOD == 'AdamW':
+            return torch.optim.AdamW(self.params,
+                                     lr=self.cfg.OPTIM.LR,
+                                     betas=(self.cfg.OPTIM.BETA, 0.999),
+                                     weight_decay=self.cfg.OPTIM.WD)
         elif self.cfg.OPTIM.METHOD == 'SGD':
             return torch.optim.SGD(self.params,
                                    lr=self.cfg.OPTIM.LR,
@@ -215,3 +230,16 @@ class TTAMethod(nn.Module):
                         m.train()
                     else:
                         m.eval()
+
+
+def forward_decorator(fn):
+    @wraps(fn)
+    def decorator(self, *args, **kwargs): 
+        if self.mixed_precision:
+            with torch.cuda.amp.autocast():
+                outputs = fn(self, *args, **kwargs)
+        else:
+            outputs = fn(self, *args, **kwargs)
+        return outputs
+    return decorator
+

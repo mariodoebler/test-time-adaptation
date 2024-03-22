@@ -14,9 +14,12 @@ from methods.sar import SAR
 from methods.rpl import RPL
 from methods.roid import ROID
 from methods.santa import SANTA
+from methods.cmf import CMF
+from methods.deyo import DeYO
 
 __all__ = [
     'Source', 'BNTest', 'BNAlpha', 'BNEMA', 'TTAug',
     'CoTTA', 'RMT', 'SANTA', 'RoTTA', 'AdaContrast', 'GTTA',
-    'LAME', 'MEMO', 'Tent', 'EATA', 'SAR', 'RPL', 'ROID'
+    'LAME', 'MEMO', 'Tent', 'EATA', 'SAR', 'RPL', 'ROID',
+    'CMF', 'DeYO',
 ]

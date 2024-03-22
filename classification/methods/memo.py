@@ -27,13 +27,28 @@ class MEMO(TTAMethod):
 
         return self.model(x[0])
 
-    @torch.enable_grad()
-    def forward_and_adapt(self, x):
-        self.optimizer.zero_grad()
+    def loss_calculation(self, x):
+        """Forward and adapt model on batch of data.
+        Measure entropy of the model prediction, take gradients, and update params.
+        """
         outputs = self.model(x)
         loss, _ = marginal_entropy(outputs)
-        loss.backward()
-        self.optimizer.step()
+        return outputs, loss
+
+    @torch.enable_grad()
+    def forward_and_adapt(self, x):
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()
         return outputs
 
     def configure_model(self):

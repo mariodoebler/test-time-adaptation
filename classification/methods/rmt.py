@@ -153,8 +153,7 @@ class RMT(TTAMethod):
                 self.src_loader_iter = iter(self.src_loader)
                 batch = next(self.src_loader_iter)
 
-            imgs_src, labels_src = batch[0], batch[1]
-            imgs_src, labels_src = imgs_src.to(self.device), labels_src.to(self.device).long()
+            imgs_src = batch[0].to(self.device)
 
             # forward the test data and optimize the model
             outputs = self.model(imgs_src)
@@ -233,11 +232,8 @@ class RMT(TTAMethod):
         loss = loss.view(anchor_count, batch_size).mean()
         return loss
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
-    def forward_and_adapt(self, x):
+    def loss_calculation(self, x):
         imgs_test = x[0]
-
-        self.optimizer.zero_grad()
 
         # forward original test data
         features_test = self.feature_extractor(imgs_test)
@@ -267,8 +263,7 @@ class RMT(TTAMethod):
         loss_contrastive = self.contrastive_loss(features=features, labels=None)
 
         loss_self_training = (0.5 * self.symmetric_cross_entropy(outputs_test, outputs_ema) + 0.5 * self.symmetric_cross_entropy(outputs_aug_test, outputs_ema)).mean(0)
-        loss_trg = self.lambda_ce_trg * loss_self_training + self.lambda_cont * loss_contrastive
-        loss_trg.backward()
+        loss = self.lambda_ce_trg * loss_self_training + self.lambda_cont * loss_contrastive
 
         if self.lambda_ce_src > 0:
             # sample source batch
@@ -283,10 +278,26 @@ class RMT(TTAMethod):
             features_src = self.feature_extractor(imgs_src.to(self.device))
             outputs_src = self.classifier(features_src)
             loss_ce_src = F.cross_entropy(outputs_src, labels_src.to(self.device).long())
-            loss_ce_src *= self.lambda_ce_src
-            loss_ce_src.backward()
+            loss += self.lambda_ce_src * loss_ce_src
 
-        self.optimizer.step()
+        # create and return the ensemble prediction
+        outputs = outputs_test + outputs_ema
+        return outputs, loss
+
+    @torch.enable_grad()
+    def forward_and_adapt(self, x):
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()
 
         self.model_ema = ema_update_model(
             model_to_update=self.model_ema,
@@ -295,8 +306,7 @@ class RMT(TTAMethod):
             device=self.device,
             update_all=True
         )
-        # create and return the ensemble prediction
-        return outputs_test + outputs_ema
+        return outputs
 
     @torch.no_grad()
     def forward_sliding_window(self, x):
@@ -329,3 +339,4 @@ class RMT(TTAMethod):
                 m.requires_grad_(True)
             else:
                 m.requires_grad_(True)
+

@@ -2,9 +2,8 @@
 Builds upon: https://github.com/DequanWang/tent
 Corresponding paper: https://arxiv.org/abs/2006.10726
 """
-
+import torch
 import torch.nn as nn
-import torch.jit
 
 from methods.base import TTAMethod
 from utils.registry import ADAPTATION_REGISTRY
@@ -22,17 +21,29 @@ class Tent(TTAMethod):
         # setup loss function
         self.softmax_entropy = Entropy()
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
+    def loss_calculation(self, x):
+        imgs_test = x[0]
+        outputs = self.model(imgs_test)
+        loss = self.softmax_entropy(outputs).mean(0)
+        return outputs, loss
+
+    @torch.enable_grad()
     def forward_and_adapt(self, x):
         """Forward and adapt model on batch of data.
         Measure entropy of the model prediction, take gradients, and update params.
         """
-        imgs_test = x[0]
-        outputs = self.model(imgs_test)
-        loss = self.softmax_entropy(outputs).mean(0)
-        loss.backward()
-        self.optimizer.step()
-        self.optimizer.zero_grad()
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()
         return outputs
 
     def collect_params(self):

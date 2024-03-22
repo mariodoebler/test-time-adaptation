@@ -75,11 +75,9 @@ class EATA(TTAMethod):
             logger.info("Not using EWC regularization. EATA decays to ETA!")
             self.fishers = None
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
-    def forward_and_adapt(self, x):
+    def loss_calculation(self, x):
         """Forward and adapt model on batch of data.
         Measure entropy of the model prediction, take gradients, and update params.
-        Return: model outputs
         """
         imgs_test = x[0]
         outputs = self.model(imgs_test)
@@ -97,7 +95,6 @@ class EATA(TTAMethod):
                                                       outputs[filter_ids_1].softmax(1), dim=1)
             filter_ids_2 = torch.where(torch.abs(cosine_similarities) < self.d_margin)
             entropys = entropys[filter_ids_2]
-            ids2 = filter_ids_2
             updated_probs = update_model_probs(self.current_model_probs, outputs[filter_ids_1][filter_ids_2].softmax(1))
         else:
             updated_probs = update_model_probs(self.current_model_probs, outputs[filter_ids_1].softmax(1))
@@ -117,16 +114,26 @@ class EATA(TTAMethod):
                 if name in self.fishers:
                     ewc_loss += self.fisher_alpha * (self.fishers[name][0] * (param - self.fishers[name][1]) ** 2).sum()
             loss += ewc_loss
-        if imgs_test[ids1][ids2].size(0) != 0:
-            loss.backward()
-            self.optimizer.step()
-        else:
-            outputs = outputs.detach()
-        self.optimizer.zero_grad()
 
         self.num_samples_update_1 += filter_ids_1[0].size(0)
         self.num_samples_update_2 += entropys.size(0)
-        self.reset_model_probs(updated_probs)
+        self.current_model_probs = updated_probs
+        return outputs, loss
+
+    @torch.enable_grad()
+    def forward_and_adapt(self, x):
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()    
         return outputs
 
     def reset(self):
@@ -134,9 +141,6 @@ class EATA(TTAMethod):
             raise Exception("cannot reset without saved model/optimizer state")
         self.load_model_and_optimizer()
         self.current_model_probs = None
-
-    def reset_model_probs(self, probs):
-        self.current_model_probs = probs
 
     def collect_params(self):
         """Collect the affine scale + shift parameters from batch norms.

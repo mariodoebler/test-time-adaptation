@@ -1,4 +1,8 @@
-import torch
+"""
+This file is based on the code from: https://openreview.net/forum?id=BllUWdpIOA
+"""
+
+import torch.jit
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.weight_norm import WeightNorm
@@ -13,46 +17,138 @@ from utils.misc import ema_update_model
 
 
 @torch.no_grad()
+def kernel(
+    model,
+    src_model,
+    bias=0.99,
+    normalization_constant=1e-4
+):
+    energy_buffer = []
+    for param, src_param in zip(model.parameters(), src_model.parameters()):
+        energy = F.cosine_similarity(
+            src_param.data.flatten(),
+            param.flatten(),
+            dim=-1)
+
+        energy_buffer.append(energy)
+
+    energy = torch.stack(energy_buffer, dim=0).mean()
+    energy = (bias - energy) / normalization_constant
+
+    return energy
+
+
+@torch.no_grad()
 def update_model_probs(x_ema, x, momentum=0.9):
     return momentum * x_ema + (1 - momentum) * x
 
 
 @ADAPTATION_REGISTRY.register()
-class ROID(TTAMethod):
+class CMF(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
+        param_size_ratio = self.num_trainable_params / 38400
 
         self.use_weighting = cfg.ROID.USE_WEIGHTING
         self.use_prior_correction = cfg.ROID.USE_PRIOR_CORRECTION
         self.use_consistency = cfg.ROID.USE_CONSISTENCY
-        self.momentum_src = cfg.ROID.MOMENTUM_SRC
         self.momentum_probs = cfg.ROID.MOMENTUM_PROBS
         self.temperature = cfg.ROID.TEMPERATURE
         self.batch_size = cfg.TEST.BATCH_SIZE
-        self.class_probs_ema = 1 / self.num_classes * torch.ones(self.num_classes).to(self.device)
+        self.class_probs_ema = 1 / self.num_classes * torch.ones(self.num_classes).cuda()
         self.tta_transform = get_tta_transforms(self.img_size, padding_mode="reflect", cotta_augs=False)
 
         # setup loss functions
+        self.sce = SymmetricCrossEntropy()
         self.slr = SoftLikelihoodRatio()
-        self.symmetric_cross_entropy = SymmetricCrossEntropy()
-        self.softmax_entropy = Entropy()  # not used as loss
+        self.ent = Entropy()
 
         # copy and freeze the source model
-        if isinstance(model, ResNetDomainNet126):  # https://github.com/pytorch/pytorch/issues/28594
+        if isinstance(model, ResNetDomainNet126):
             for module in model.modules():
                 for _, hook in module._forward_pre_hooks.items():
                     if isinstance(hook, WeightNorm):
                         delattr(module, hook.name)
 
-        # note: reduce memory consumption by only saving normalization parameters
-        self.src_model = deepcopy(self.model).cpu()
+        self.src_model = deepcopy(self.model)
         for param in self.src_model.parameters():
             param.detach_()
 
-        # note: if the model is never reset, like for continual adaptation,
-        # then skipping the state copy would save memory
-        self.models = [self.src_model, self.model]
+        # CMF
+        self.alpha = cfg.CMF.ALPHA
+        self.gamma = cfg.CMF.GAMMA
+        self.post_type = cfg.CMF.TYPE
+        self.hidden_model = deepcopy(self.model)
+        for param in self.hidden_model.parameters():
+            param.detach_()
+
+        self.hidden_var = 0
+        self.q = cfg.CMF.Q * param_size_ratio
+
+        self.models = [self.src_model, self.model, self.hidden_model]
         self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
+
+    @torch.no_grad()
+    def bayesian_filtering(self):
+        # 1. predict step
+        # NOTE: self.post_type==lp is the default,
+        # in which case the predict step and update step can be combined to reduce computation.
+        # For clarity, they are separated in the code.
+        recovered_model = ema_update_model(
+            model_to_update=self.hidden_model,
+            model_to_merge=self.src_model,
+            momentum=self.alpha,
+            device=self.device,
+            update_all=True
+        )
+
+        # 2. update step
+        self.hidden_var = self.alpha ** 2 * self.hidden_var + self.q
+
+        r = (1 - self.q)
+        self.beta = r / (self.hidden_var + r)
+        self.beta = self.beta if self.beta > 0.89 else 0.89
+        self.beta = self.beta if self.beta < 0.9999 else 1.0
+
+        self.hidden_var = self.beta * self.hidden_var
+        self.hidden_model = ema_update_model(
+            model_to_update=recovered_model,
+            model_to_merge=self.model,
+            momentum=self.beta,
+            device=self.device,
+            update_all=True
+        )
+
+        # 3. parameter ensemble step
+        self.model = ema_update_model(
+            model_to_update=self.model,
+            model_to_merge=recovered_model if self.post_type == "op" else self.hidden_model,
+            momentum=self.gamma,
+            device=self.device
+        )
+
+        # logging
+        if self.cfg.TEST.DEBUG:
+            tgt_energy = kernel(
+                model=self.model,
+                src_model=self.src_model,
+                bias=0,
+                normalization_constant=1.0
+            )
+            hidden_energy = kernel(
+                model=self.hidden_model,
+                src_model=self.src_model,
+                bias=0,
+                normalization_constant=1.0
+            )
+            res ={
+                "tgt_energy": tgt_energy,
+                "hidden_energy": hidden_energy,
+            }
+        else:
+            res = None
+
+        return res
 
     def loss_calculation(self, x):
         imgs_test = x[0]
@@ -66,14 +162,15 @@ class ROID(TTAMethod):
                 mask = weights_div < weights_div.mean()
 
                 # calculate certainty based weight
-                weights_cert = - self.softmax_entropy(logits=outputs)
+                weights_cert = - self.ent(logits=outputs)
                 weights_cert = (weights_cert - weights_cert.min()) / (weights_cert.max() - weights_cert.min())
 
                 # calculate the final weights
                 weights = torch.exp(weights_div * weights_cert / self.temperature)
                 weights[mask] = 0.
 
-                self.class_probs_ema = update_model_probs(x_ema=self.class_probs_ema, x=outputs.softmax(1).mean(0), momentum=self.momentum_probs)
+                self.class_probs_ema = update_model_probs(x_ema=self.class_probs_ema, x=outputs.softmax(1).mean(0),
+                                                          momentum=self.momentum_probs)
 
         # calculate the soft likelihood ratio loss
         loss_out = self.slr(logits=outputs)
@@ -87,7 +184,7 @@ class ROID(TTAMethod):
         # calculate the consistency loss
         if self.use_consistency:
             outputs_aug = self.model(self.tta_transform(imgs_test[~mask]))
-            loss += (self.symmetric_cross_entropy(x=outputs_aug, x_ema=outputs[~mask]) * weights[~mask]).sum() / self.batch_size
+            loss += (self.sce(x=outputs_aug, x_ema=outputs[~mask]) * weights[~mask]).sum() / self.batch_size
 
         return outputs, loss
 
@@ -104,16 +201,11 @@ class ROID(TTAMethod):
             outputs, loss = self.loss_calculation(x)
             loss.backward()
             self.optimizer.step()
-            self.optimizer.zero_grad()
-
-        self.model = ema_update_model(
-            model_to_update=self.model,
-            model_to_merge=self.src_model,
-            momentum=self.momentum_src,
-            device=self.device
-        )
+            self.optimizer.zero_grad()    
 
         with torch.no_grad():
+            self.bayesian_filtering()
+
             if self.use_prior_correction:
                 prior = outputs.softmax(1).mean(0)
                 smooth = max(1 / outputs.shape[0], 1 / outputs.shape[1]) / torch.max(prior)
@@ -146,8 +238,8 @@ class ROID(TTAMethod):
 
     def configure_model(self):
         """Configure model."""
-        self.model.eval()   # eval mode to avoid stochastic depth in swin. test-time normalization is still applied
-        self.model.requires_grad_(False)  # disable grad, to (re-)enable only necessary parts
+        self.model.eval()
+        self.model.requires_grad_(False)
         # re-enable gradient for normalization layers
         for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):

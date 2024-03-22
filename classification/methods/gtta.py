@@ -25,6 +25,7 @@ class GTTA(TTAMethod):
                                                preprocess=model.model_preprocess,
                                                data_root_dir=cfg.DATA_DIR,
                                                batch_size=batch_size_src,
+                                               use_clip=cfg.MODEL.USE_CLIP,
                                                ckpt_path=cfg.MODEL.CKPT_PATH,
                                                num_samples=cfg.SOURCE.NUM_SAMPLES,
                                                percentage=cfg.SOURCE.PERCENTAGE,

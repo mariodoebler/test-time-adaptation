@@ -52,6 +52,9 @@ _C.RNG_SEED = 1
 # Deterministic experiments.
 _C.DETERMINISM = False
 
+# Precision
+_C.MIXED_PRECISION = False
+
 # Optional description of a config
 _C.DESC = ""
 
@@ -64,12 +67,14 @@ _C.MODEL = CfgNode()
 
 # Some of the available models can be found here:
 # Torchvision: https://pytorch.org/vision/0.14/models.html
-# timm: https://github.com/huggingface/pytorch-image-models
+# timm: https://github.com/huggingface/pytorch-image-models/tree/v0.6.13
 # RobustBench: https://github.com/RobustBench/robustbench
+# OpenCLIP: https://github.com/mlfoundations/open_clip
 _C.MODEL.ARCH = 'Standard'
 
 # Type of pre-trained weights
 # For torchvision models see: https://pytorch.org/vision/0.14/models.html
+# For OpenClip models, use either 'openai' (for the original OpenAI weights) or see https://github.com/mlfoundations/open_clip
 _C.MODEL.WEIGHTS = "IMAGENET1K_V1"
 
 # Path to a specific checkpoint
@@ -116,7 +121,7 @@ _C.OPTIM.STEPS = 1
 # Learning rate
 _C.OPTIM.LR = 1e-3
 
-# Optimizer choices: Adam, SGD
+# Optimizer choices: Adam, AdamW, SGD
 _C.OPTIM.METHOD = 'Adam'
 
 # Beta1 for Adam based optimizers
@@ -222,6 +227,19 @@ _C.SAR = CfgNode()
 # Threshold e_m for model recovery scheme
 _C.SAR.RESET_CONSTANT_EM = 0.2
 
+# --------------------------------- DeYO options ---------------------------- #
+_C.DEYO = CfgNode()
+
+_C.DEYO.REWEIGHT_ENT = True
+_C.DEYO.REWEIGHT_PLPD = True
+_C.DEYO.PLPD = 0.2
+_C.DEYO.MARGIN = 0.5                # Will be multiplied by: DEYO.MARGIN * math.log(num_classes)
+_C.DEYO.AUG_TYPE = "patch"          # Choose from: ['occ', 'patch', 'pixel']
+_C.DEYO.OCCLUSION_SIZE = 112        # For aug_type occ
+_C.DEYO.ROW_START = 56              # For aug_type occ
+_C.DEYO.COLUMN_START = 56           # For aug_type occ
+_C.DEYO.PATCH_LEN = 4               # For aug_type patch
+
 # --------------------------------- ROTTA options -------------------------- #
 _C.ROTTA = CfgNode()
 
@@ -247,6 +265,14 @@ _C.ROID.USE_CONSISTENCY = True      # Whether to use consistency loss
 _C.ROID.MOMENTUM_SRC = 0.99         # Momentum for weight ensembling (param * model + (1-param) * model_src)
 _C.ROID.MOMENTUM_PROBS = 0.9        # Momentum for diversity weighting
 _C.ROID.TEMPERATURE = 1/3           # Temperature for weights
+
+# --------------------------------- CMF options --------------------------- #
+_C.CMF = CfgNode()
+
+_C.CMF.ALPHA = 0.99
+_C.CMF.GAMMA = 0.99
+_C.CMF.Q = 0.005
+_C.CMF.TYPE = "lp"
 
 # ------------------------------- Source options -------------------------- #
 _C.SOURCE = CfgNode()
@@ -405,7 +431,7 @@ def get_num_classes(dataset_name: str):
                                 "imagenet": 1000, "imagenet_v2": 1000, "imagenet_c": 1000, "ccc": 1000,
                                 "imagenet_k": 1000, "imagenet_r": 200, "imagenet_a": 200,
                                 "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
-                                "domainnet126": 126
+                                "domainnet126": 126,
                                 }
     assert dataset_name in dataset_name2num_classes.keys(), \
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(dataset_name2num_classes.keys())}"

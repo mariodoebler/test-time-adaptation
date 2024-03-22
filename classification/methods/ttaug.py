@@ -12,7 +12,7 @@ class TTAug(TTAMethod):
 
         self.model_state, _ = self.copy_model_and_optimizer()
 
-    @torch.no_grad()
+    @forward_decorator
     def forward(self, x):
         x_aug = torch.cat(x, dim=0)
         outputs = self.model(x_aug).mean(0, keepdim=True)

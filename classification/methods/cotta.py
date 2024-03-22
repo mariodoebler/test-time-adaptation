@@ -40,8 +40,7 @@ class CoTTA(TTAMethod):
         self.softmax_entropy = softmax_entropy_cifar if "cifar" in self.dataset_name else softmax_entropy_imagenet
         self.transform = get_tta_transforms(self.img_size)
 
-    @torch.enable_grad()  # ensure grads in possible no grad context for testing
-    def forward_and_adapt(self, x):
+    def loss_calculation(self, x):
         imgs_test = x[0]
         outputs = self.model(imgs_test)
 
@@ -61,11 +60,23 @@ class CoTTA(TTAMethod):
             # Create the prediction of the teacher model
             outputs_ema = self.model_ema(imgs_test)
 
-        # Student update
         loss = self.softmax_entropy(outputs, outputs_ema).mean(0)
-        loss.backward()
-        self.optimizer.step()
-        self.optimizer.zero_grad()
+        return outputs_ema, loss
+
+    @torch.enable_grad()
+    def forward_and_adapt(self, x):
+        if self.mixed_precision and self.device == "cuda":
+            with torch.cuda.amp.autocast():
+                outputs_ema, loss = self.loss_calculation(x)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            self.optimizer.zero_grad()
+        else:
+            outputs_ema, loss = self.loss_calculation(x)
+            loss.backward()
+            self.optimizer.step()
+            self.optimizer.zero_grad()    
 
         # Teacher update
         self.model_ema = ema_update_model(
@@ -77,12 +88,12 @@ class CoTTA(TTAMethod):
         )
 
         # Stochastic restore
-        if self.rst > 0.:
-            for nm, m in self.model.named_modules():
-                for npp, p in m.named_parameters():
-                    if npp in ['weight', 'bias'] and p.requires_grad:
-                        mask = (torch.rand(p.shape) < self.rst).float().to(self.device)
-                        with torch.no_grad():
+        with torch.no_grad():
+            if self.rst > 0.:
+                for nm, m in self.model.named_modules():
+                    for npp, p in m.named_parameters():
+                        if npp in ['weight', 'bias'] and p.requires_grad:
+                            mask = (torch.rand(p.shape) < self.rst).float().to(self.device)
                             p.data = self.model_states[0][f"{nm}.{npp}"] * mask + p * (1.-mask)
         return outputs_ema
 

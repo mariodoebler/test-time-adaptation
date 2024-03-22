@@ -31,7 +31,7 @@ class SAR(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
 
-        self.margin_e0 = math.log(num_classes) * 0.40  # margin E_0 for reliable entropy minimization, Eqn. (2)
+        self.margin_e0 = cfg.EATA.MARGIN_E0 * math.log(num_classes)  # margin E_0 for reliable entropy minimization, Eqn. (2)
         self.reset_constant_em = cfg.SAR.RESET_CONSTANT_EM  # threshold e_m for model recovery scheme
         self.ema = None  # to record the moving average of model output entropy, as model recovery criteria
 

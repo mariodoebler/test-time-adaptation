@@ -1,6 +1,5 @@
-import torch
 from copy import deepcopy
-from methods.base import TTAMethod
+from methods.base import TTAMethod, forward_decorator
 from utils.registry import ADAPTATION_REGISTRY
 
 
@@ -9,7 +8,7 @@ class Source(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
 
-    @torch.no_grad()
+    @forward_decorator
     def forward_and_adapt(self, x):
         imgs_test = x[0]
         return self.model(imgs_test)

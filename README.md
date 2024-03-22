@@ -88,12 +88,16 @@ This repository allows to study a wide range of different datasets, models, sett
   - Combinations like `gradual_correlated` or `reset_each_shift_correlated` are also possible.
 
 - **Methods**
-  - The repository currently supports the following methods: BN-0 (source), BN-alpha, BN-1, [TENT](https://openreview.net/pdf?id=uXl3bZLkr3c),
+  - The repository currently supports the following methods: Source, BN-alpha, BN-1, [TENT](https://openreview.net/pdf?id=uXl3bZLkr3c),
   [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
   [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
   [SAR](https://arxiv.org/abs/2302.12400), [RoTTA](https://arxiv.org/abs/2303.13899), [RPL](https://arxiv.org/abs/2104.12928),
   [RDumb](https://arxiv.org/abs/2306.05401), [SANTA](https://openreview.net/forum?id=V7guVYzvE4), [DeYO](https://arxiv.org/abs/2403.07366), [CMF](https://openreview.net/forum?id=BllUWdpIOA)
   [GTTA](https://arxiv.org/abs/2208.07736), [RMT](https://arxiv.org/abs/2211.13081), and [ROID](https://arxiv.org/abs/2306.00650).
+
+- **Mixed Precision Training**
+  - Almost all of the aforementioned methods (except SAR and GTTA) can be trained with mixed precision. This greatly 
+  speeds up your experiments and requires less memory. Note that all benchmark results are generated with fp32.
 
 
 - **Modular Design**

@@ -135,7 +135,7 @@ E.g., to run ROID for the ImageNet-to-ImageNet-R benchmark, run the following co
 python test_time.py --cfg cfgs/imagenet_others/roid.yaml CORRUPTION.DATASET imagenet_r
 ```
 
-Alternatively, you can reproduce our experiments by running the `run.sh` in the subdirectory `classification`. For the different settings, modify `setting` within `run.sh`.
+Alternatively, you can reproduce our experiments by running the `run.sh` in the subdirectory `classification/scripts`. For the different settings, modify `setting` within `run.sh`.
 
 To run the different continual DomainNet-126 sequences, you have to pass the `MODEL.CKPT_PATH` argument. When not specifying a `CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
 The checkpoints are provided by [AdaContrast](https://github.com/DianCh/AdaContrast) and can be downloaded [here](https://drive.google.com/drive/folders/1OOSzrl6kzxIlEhNAK168dPXJcHwJ1A2X). Structurally, it is best to download them into the directory `./ckpt/domainnet126`.

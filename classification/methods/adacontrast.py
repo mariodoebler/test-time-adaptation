@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from methods.base import TTAMethod
 from models.model import BaseModel
 from utils.registry import ADAPTATION_REGISTRY
+from utils.misc import ema_update_model
 
 
 class AdaMoCo(nn.Module):
@@ -23,7 +24,7 @@ class AdaMoCo(nn.Module):
 
     def __init__(
         self,
-        src_model,
+        base_model,
         momentum_model,
         device,
         K=16384,
@@ -46,18 +47,18 @@ class AdaMoCo(nn.Module):
         self.device = device
 
         # create the encoders
-        self.src_model = src_model
+        self.base_model = base_model
         self.momentum_model = momentum_model
 
         # create the fc heads
-        feature_dim = src_model.output_dim
+        feature_dim = base_model.output_dim
 
         # freeze key model
         self.momentum_model.requires_grad_(False)
 
         # create the memory bank
         self.register_buffer("mem_feat", torch.randn(feature_dim, K))
-        self.register_buffer("mem_labels", torch.randint(0, src_model.num_classes, (K,)))
+        self.register_buffer("mem_labels", torch.randint(0, base_model.num_classes, (K,)))
         self.mem_feat = F.normalize(self.mem_feat, dim=0)
 
         if checkpoint_path:
@@ -74,17 +75,6 @@ class AdaMoCo(nn.Module):
         logging.info(
             f"Loaded from {checkpoint_path}; missing params: {msg.missing_keys}"
         )
-
-    @torch.no_grad()
-    def _momentum_update_key_encoder(self):
-        """
-        Momentum update of the key encoder
-        """
-        # encoder_q -> encoder_k
-        for param_q, param_k in zip(
-            self.src_model.parameters(), self.momentum_model.parameters()
-        ):
-            param_k.data = param_k.data * self.m + param_q.data * (1.0 - self.m)
 
     @torch.no_grad()
     def update_memory(self, keys, pseudo_labels):
@@ -112,7 +102,7 @@ class AdaMoCo(nn.Module):
         """
 
         # compute query features
-        feats_q, logits_q = self.src_model(im_q, return_feats=True)
+        feats_q, logits_q = self.base_model(im_q, return_feats=True)
 
         if cls_only:
             return feats_q, logits_q
@@ -121,7 +111,14 @@ class AdaMoCo(nn.Module):
 
         # compute key features
         with torch.no_grad():  # no gradient to keys
-            self._momentum_update_key_encoder()  # update the key encoder
+            # update the key encoder
+            self.model_ema = ema_update_model(
+                model_to_update=self.momentum_model,
+                model_to_merge=self.base_model,
+                momentum=self.m,
+                device=self.device,
+                update_all=True
+            )
 
             k, _ = self.momentum_model(im_k, return_feats=True)
             k = F.normalize(k, dim=1)
@@ -167,31 +164,31 @@ class AdaContrast(TTAMethod):
         self.first_X_samples = 0
 
         if self.dataset_name != "domainnet126":
-            self.src_model = BaseModel(model, cfg.MODEL.ARCH, self.dataset_name)
+            self.base_model = BaseModel(model, cfg.MODEL.ARCH, self.dataset_name)
         else:
-            self.src_model = model
+            self.base_model = model
 
         # Setup EMA model
-        self.momentum_model = self.copy_model(self.src_model)
+        self.momentum_model = self.copy_model(self.base_model)
 
         self.model = AdaMoCo(
-                        src_model=self.src_model,
-                        momentum_model=self.momentum_model,
-                        device=self.device,
-                        K=self.queue_size,
-                        m=self.m,
-                        T_moco=self.T_moco,
-                        ).to(self.device)
+            base_model=self.base_model,
+            momentum_model=self.momentum_model,
+            device=self.device,
+            K=self.queue_size,
+            m=self.m,
+            T_moco=self.T_moco,
+            ).to(self.device)
 
         self.banks = {
-            "features": torch.tensor([], device=self.device),
-            "probs": torch.tensor([], device=self.device),
+            "features": torch.tensor([], device=self.device, dtype=torch.float16 if self.mixed_precision else torch.float32),
+            "probs": torch.tensor([], device=self.device, dtype=torch.float16 if self.mixed_precision else torch.float32),
             "ptr": 0
         }
 
         # note: if the self.model is never reset, like for continual adaptation,
         # then skipping the state copy would save memory
-        self.models = [self.src_model, self.momentum_model]
+        self.models = [self.base_model, self.momentum_model]
         self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
 
     def forward(self, x):
@@ -205,15 +202,6 @@ class AdaContrast(TTAMethod):
         self.model.eval()
         _, outputs = self.model(images_test, cls_only=True)
         return outputs
-
-    @torch.no_grad()
-    def forward_sliding_window(self, x):
-        """
-        :param x: The buffered data created with a sliding window
-        :return: Dummy output. Has no effect
-        """
-        imgs_test = x[0]
-        return torch.zeros_like(imgs_test)
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
@@ -275,10 +263,19 @@ class AdaContrast(TTAMethod):
 
         return logits_q
 
+    @torch.no_grad()
+    def forward_sliding_window(self, x):
+        """
+        :param x: The buffered data created with a sliding window
+        :return: Dummy output. Has no effect
+        """
+        imgs_test = x[0]
+        return torch.zeros_like(imgs_test)
+
     def reset(self):
         super().reset()
         self.model = AdaMoCo(
-                        src_model=self.src_model,
+                        base_model=self.base_model,
                         momentum_model=self.momentum_model,
                         device=self.device,
                         K=self.queue_size,
@@ -287,8 +284,8 @@ class AdaContrast(TTAMethod):
                         ).to(self.device)
         self.first_X_samples = 0
         self.banks = {
-            "features": torch.tensor([], device=self.device),
-            "probs": torch.tensor([], device=self.device),
+            "features": torch.tensor([], device=self.device, dtype=torch.float16 if self.mixed_precision else torch.float32),
+            "probs": torch.tensor([], device=self.device, dtype=torch.float16 if self.mixed_precision else torch.float32),
             "ptr": 0
         }
 
@@ -344,8 +341,8 @@ class AdaContrast(TTAMethod):
 
 def setup_adacontrast_optimizer(model, cfg):
     backbone_params, extra_params = (
-        model.src_model.get_params()
-        if hasattr(model, "src_model")
+        model.base_model.get_params()
+        if hasattr(model, "base_model")
         else model.get_params()
     )
 

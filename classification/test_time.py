@@ -5,6 +5,7 @@ import numpy as np
 import methods
 
 from models.model import get_model
+from utils.misc import print_memory_info
 from utils.eval_utils import get_accuracy, eval_domain_dict
 from utils.registry import ADAPTATION_REGISTRY
 from datasets.data_loading import get_test_loader
@@ -51,7 +52,7 @@ def evaluate(description):
         domain_sequence = ["clipart", "infograph", "painting", "real", "sketch"]
     else:
         domain_sequence = cfg.CORRUPTION.TYPE
-    logger.info(f"Using the following domain sequence: {domain_sequence}")
+    logger.info(f"Using {cfg.CORRUPTION.DATASET} with the following domain sequence: {domain_sequence}")
 
     # prevent iterating multiple times over the same data in the mixed_domains setting
     domain_seq_loop = ["mixed"] if "mixed_domains" in cfg.SETTING else domain_sequence
@@ -79,30 +80,39 @@ def evaluate(description):
             logger.warning("not resetting model")
 
         for severity in severities:
-            test_data_loader = get_test_loader(setting=cfg.SETTING,
-                                               adaptation=cfg.MODEL.ADAPTATION,
-                                               dataset_name=cfg.CORRUPTION.DATASET,
-                                               preprocess=model_preprocess,
-                                               data_root_dir=cfg.DATA_DIR,
-                                               domain_name=domain_name,
-                                               domain_names_all=domain_sequence,
-                                               severity=severity,
-                                               num_examples=cfg.CORRUPTION.NUM_EX,
-                                               rng_seed=cfg.RNG_SEED,
-                                               delta_dirichlet=cfg.TEST.DELTA_DIRICHLET,
-                                               batch_size=cfg.TEST.BATCH_SIZE,
-                                               shuffle=False,
-                                               workers=min(cfg.TEST.NUM_WORKERS, os.cpu_count()))
+            test_data_loader = get_test_loader(
+                setting=cfg.SETTING,
+                adaptation=cfg.MODEL.ADAPTATION,
+                dataset_name=cfg.CORRUPTION.DATASET,
+                preprocess=model_preprocess,
+                data_root_dir=cfg.DATA_DIR,
+                domain_name=domain_name,
+                domain_names_all=domain_sequence,
+                severity=severity,
+                num_examples=cfg.CORRUPTION.NUM_EX,
+                rng_seed=cfg.RNG_SEED,
+                n_views=cfg.TEST.N_AUGMENTATIONS,
+                delta_dirichlet=cfg.TEST.DELTA_DIRICHLET,
+                batch_size=cfg.TEST.BATCH_SIZE,
+                shuffle=False,
+                workers=min(cfg.TEST.NUM_WORKERS, os.cpu_count())
+            )
+
+            if i_dom == 0:
+                # Note that the input normalization is done inside of the model
+                logger.info(f"Using the following data transformation:\n{test_data_loader.dataset.transform}")
 
             # evaluate the model
-            acc, domain_dict, num_samples = get_accuracy(model,
-                                                         data_loader=test_data_loader,
-                                                         dataset_name=cfg.CORRUPTION.DATASET,
-                                                         domain_name=domain_name,
-                                                         setting=cfg.SETTING,
-                                                         domain_dict=domain_dict,
-                                                         print_every=cfg.PRINT_EVERY,
-                                                         device=device)
+            acc, domain_dict, num_samples = get_accuracy(
+                model,
+                data_loader=test_data_loader,
+                dataset_name=cfg.CORRUPTION.DATASET,
+                domain_name=domain_name,
+                setting=cfg.SETTING,
+                domain_dict=domain_dict,
+                print_every=cfg.PRINT_EVERY,
+                device=device
+            )
 
             err = 1. - acc
             errs.append(err)
@@ -119,6 +129,9 @@ def evaluate(description):
     if "mixed_domains" in cfg.SETTING and len(domain_dict.values()) > 0:
         # print detailed results for each domain
         eval_domain_dict(domain_dict, domain_seq=domain_sequence)
+
+    if cfg.TEST.DEBUG:
+        print_memory_info()
 
 
 if __name__ == '__main__':

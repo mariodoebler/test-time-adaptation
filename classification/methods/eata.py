@@ -29,7 +29,7 @@ class EATA(TTAMethod):
 
         self.num_samples_update_1 = 0  # number of samples after first filtering, exclude unreliable samples
         self.num_samples_update_2 = 0  # number of samples after second filtering, exclude both unreliable and redundant samples
-        self.e_margin = math.log(self.num_classes) * 0.40   # hyper-parameter E_0 (Eqn. 3)
+        self.e_margin = cfg.EATA.MARGIN_E0 * math.log(num_classes)   # hyper-parameter E_0 (Eqn. 3)
         self.d_margin = cfg.EATA.D_MARGIN   # hyperparameter \epsilon for cosine similarity thresholding (Eqn. 5)
 
         self.current_model_probs = None  # the moving average of probability vector (Eqn. 4)

@@ -17,6 +17,7 @@ from datasets.corruptions_datasets import create_cifarc_dataset, create_imagenet
 from datasets.imagenet_d_utils import create_symlinks_and_get_imagenet_visda_mapping
 from datasets.imagenet_dict import map_dict
 from augmentations.transforms_adacontrast import get_augmentation_versions, get_augmentation
+from augmentations.transforms_augmix import AugMixAugmenter
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ def identity(x):
     return x
 
 
-def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transforms.Compose, None]):
+def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transforms.Compose, None], n_views: int = 64):
     """
     Get the transformation pipeline
     Note that the data normalization is done within the model
@@ -34,10 +35,16 @@ def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transfor
         dataset_name: Name of the dataset
         adaptation: Name of the adaptation method
         preprocess: Input pre-processing from restored model (if available)
+        n_views Number of views for test-time augmentation
     Returns:
         transforms: The data pre-processing (and augmentation)
     """
-    if adaptation == "adacontrast":
+    if adaptation in ["memo", "ttaug"]:
+        base_transform = transforms.Compose([preprocess.transforms[0], preprocess.transforms[1]]) if preprocess else None
+        preproc = transforms.Compose([transforms.ToTensor()])
+        transform = AugMixAugmenter(base_transform, preproc, dataset_name=dataset_name, n_views=n_views, use_augmix=True)
+
+    elif adaptation == "adacontrast":
         # adacontrast requires specific transformations
         if dataset_name in ["cifar10", "cifar100", "cifar10_c", "cifar100_c"]:
             transform = get_augmentation_versions(aug_versions="twss", aug_type="moco-v2-light", res_size=(32, 32), crop_size=32)
@@ -85,7 +92,8 @@ def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transfor
 
 def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess: Union[transforms.Compose, None],
                     data_root_dir: str, domain_name: str, domain_names_all: list, severity: int, num_examples: int,
-                    rng_seed: int, delta_dirichlet: float = 0., batch_size: int = 128, shuffle: bool = False, workers: int = 4):
+                    rng_seed: int, n_views: int = 64, delta_dirichlet: float = 0.,
+                    batch_size: int = 128, shuffle: bool = False, workers: int = 4):
     """
     Create the test data loader
     Input:
@@ -99,6 +107,7 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
         severity: Severity level in case of corrupted data
         num_examples: Number of test samples for the current domain
         rng_seed: A seed number
+        n_views: Number of views for test-time augmentation
         delta_dirichlet: Parameter of the Dirichlet distribution
         batch_size: The number of samples to process in each iteration
         shuffle: Whether to shuffle the data. Will destroy pre-defined settings
@@ -112,12 +121,13 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
     np.random.seed(rng_seed)
 
     data_dir = complete_data_dir_path(data_root_dir, dataset_name)
-    transform = get_transform(dataset_name, adaptation, preprocess)
+    transform = get_transform(dataset_name, adaptation, preprocess, n_views)
 
     # create the test dataset
     if domain_name == "none":
-        test_dataset, _ = get_source_loader(dataset_name, adaptation, preprocess, data_root_dir,
-                                            batch_size, train_split=False, workers=workers)
+        test_dataset, _ = get_source_loader(dataset_name, adaptation, preprocess,
+                                            data_root_dir, batch_size, n_views,
+                                            train_split=False, workers=workers)
     else:
         if dataset_name in ["cifar10_c", "cifar100_c"]:
             test_dataset = create_cifarc_dataset(dataset_name=dataset_name,
@@ -201,8 +211,9 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
 
 
 def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[transforms.Compose, None],
-                      data_root_dir: str, batch_size: int, train_split: bool = True, ckpt_path: str = None,
-                      num_samples: int = -1, percentage: float = 1.0, workers: int = 4):
+                      data_root_dir: str, batch_size: int, n_views: int = 64,
+                      train_split: bool = True, ckpt_path: str = None, num_samples: int = -1,
+                      percentage: float = 1.0, workers: int = 4):
     """
     Create the source data loader
     Input:
@@ -211,6 +222,7 @@ def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[tran
         preprocess: Input pre-processing from restored model (if available)
         data_root_dir: Path of the data root directory
         batch_size: The number of samples to process in each iteration
+        n_views: Number of views for test-time augmentation
         train_split: Whether to use the training or validation split
         ckpt_path: Path to a checkpoint which determines the source domain for DomainNet-126
         num_samples: Number of source samples used during training
@@ -228,7 +240,7 @@ def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[tran
     data_dir = complete_data_dir_path(data_root_dir, dataset_name=src_dataset_name)
 
     # get the data transformation
-    transform = get_transform(src_dataset_name, adaptation, preprocess)
+    transform = get_transform(src_dataset_name, adaptation, preprocess, n_views)
 
     # create the source dataset
     if dataset_name in ["cifar10", "cifar10_c"]:

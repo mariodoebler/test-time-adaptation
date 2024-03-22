@@ -130,9 +130,8 @@ class ColorJitterPro(ColorJitter):
         return format_string
 
 
-def get_tta_transforms(dataset, gaussian_std: float=0.005, soft=False, padding_mode='edge', cotta_augs=True):
-    img_shape = (32, 32, 3) if "cifar" in dataset else (224, 224, 3)
-    n_pixels = img_shape[0]
+def get_tta_transforms(img_size, gaussian_std: float=0.005, soft=False, padding_mode='edge', cotta_augs=True):
+    n_pixels = img_size[0] if isinstance(img_size, (list, tuple)) else img_size
 
     tta_transforms = [
         Clip(0.0, 1.0),

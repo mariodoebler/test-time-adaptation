@@ -10,12 +10,7 @@ import torch.jit
 from methods.base import TTAMethod
 from augmentations.transforms_cotta import get_tta_transforms
 from utils.registry import ADAPTATION_REGISTRY
-
-
-def update_ema_variables(ema_model, model, alpha_teacher):
-    for ema_param, param in zip(ema_model.parameters(), model.parameters()):
-        ema_param.data[:] = alpha_teacher * ema_param[:].data[:] + (1 - alpha_teacher) * param[:].data[:]
-    return ema_model
+from utils.misc import ema_update_model
 
 
 @ADAPTATION_REGISTRY.register()
@@ -43,7 +38,7 @@ class CoTTA(TTAMethod):
         self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
 
         self.softmax_entropy = softmax_entropy_cifar if "cifar" in self.dataset_name else softmax_entropy_imagenet
-        self.transform = get_tta_transforms(self.dataset_name)
+        self.transform = get_tta_transforms(self.img_size)
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
@@ -54,14 +49,14 @@ class CoTTA(TTAMethod):
         anchor_prob = torch.nn.functional.softmax(self.model_anchor(imgs_test), dim=1).max(1)[0]
 
         # Augmentation-averaged Prediction
-        outputs_emas = []
+        ema_outputs = []
         if anchor_prob.mean(0) < self.ap:
             for _ in range(self.n_augmentations):
                 outputs_ = self.model_ema(self.transform(imgs_test)).detach()
-                outputs_emas.append(outputs_)
+                ema_outputs.append(outputs_)
 
             # Threshold choice discussed in supplementary
-            outputs_ema = torch.stack(outputs_emas).mean(0)
+            outputs_ema = torch.stack(ema_outputs).mean(0)
         else:
             # Create the prediction of the teacher model
             outputs_ema = self.model_ema(imgs_test)
@@ -73,7 +68,13 @@ class CoTTA(TTAMethod):
         self.optimizer.zero_grad()
 
         # Teacher update
-        self.model_ema = update_ema_variables(ema_model=self.model_ema, model=self.model, alpha_teacher=self.mt)
+        self.model_ema = ema_update_model(
+            model_to_update=self.model_ema,
+            model_to_merge=self.model,
+            momentum=self.mt,
+            device=self.device,
+            update_all=True
+        )
 
         # Stochastic restore
         if self.rst > 0.:
@@ -123,4 +124,4 @@ def softmax_entropy_cifar(x, x_ema) -> torch.Tensor:
 
 @torch.jit.script
 def softmax_entropy_imagenet(x, x_ema) -> torch.Tensor:
-    return -0.5*(x_ema.softmax(1) * x.log_softmax(1)).sum(1)-0.5*(x.softmax(1) * x_ema.log_softmax(1)).sum(1) 
+    return -0.5*(x_ema.softmax(1) * x.log_softmax(1)).sum(1)-0.5*(x.softmax(1) * x_ema.log_softmax(1)).sum(1)

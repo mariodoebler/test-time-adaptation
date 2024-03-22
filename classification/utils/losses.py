@@ -18,6 +18,7 @@ class SymmetricCrossEntropy(nn.Module):
     def __call__(self, x, x_ema):
         return -(1-self.alpha) * (x_ema.softmax(1) * x.log_softmax(1)).sum(1) - self.alpha * (x.softmax(1) * x_ema.log_softmax(1)).sum(1)
 
+
 class AugCrossEntropy(nn.Module):
     def __init__(self, alpha=0.5):
         super(AugCrossEntropy, self).__init__()

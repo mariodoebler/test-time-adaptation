@@ -84,22 +84,18 @@ def get_timm_model(model_name: str):
     model = timm.create_model(model_name, pretrained=True)
     logger.info(f"Successfully restored the weights of '{model_name}' from timm.")
 
-    # add the corresponding input normalization to the model
-    if hasattr(model, "pretrained_cfg"):
-        logger.info(f"General model information: {model.pretrained_cfg}")
-        logger.info(f"Adding input normalization to the model using:"
-                    f" mean={model.pretrained_cfg['mean']} \t std={model.pretrained_cfg['std']}")
-        model = normalize_model(model, mean=model.pretrained_cfg["mean"], std=model.pretrained_cfg["std"])
-    else:
-        raise AttributeError(f"Attribute 'pretrained_cfg' is missing for model '{model_name}' from timm."
-                             f" This prevents adding the correct input normalization to the model!")
-
-    # get the input transformation
+    # restore the input pre-processing
     data_config = timm.data.resolve_model_data_config(model)
     preprocess = timm.data.create_transform(**data_config)
-    # exclude the input normalization as it was added to the model
-    if isinstance(preprocess.transforms[-1], transforms.Normalize):
-        preprocess.transforms = preprocess.transforms[:-1]
+
+    # if there is an input normalization, add it to the model and remove it from the input pre-processing
+    for transf in preprocess.transforms[::-1]:
+        if isinstance(transf, transforms.Normalize):
+            # add input normalization to the model
+            model = normalize_model(model, mean=transf.mean, std=transf.std)
+            preprocess.transforms.remove(transf)
+            break
+
     return model, preprocess
 
 

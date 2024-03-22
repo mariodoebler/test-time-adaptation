@@ -1,20 +1,8 @@
-import numpy as np
-from PIL import Image
-
 import torch
 from copy import deepcopy
-from methods.base import TTAMethod
-from augmentations.transforms_memo_cifar import aug_cifar
-from augmentations.transforms_memo_imagenet import aug_imagenet
+from methods.bn import AlphaBatchNorm
+from methods.base import TTAMethod, forward_decorator
 from utils.registry import ADAPTATION_REGISTRY
-
-
-def tta(image, n_augmentations, aug, device):
-
-    image = np.clip(image[0].cpu().numpy() * 255., 0, 255).astype(np.uint8).transpose(1, 2, 0)
-    inputs = [aug(Image.fromarray(image)) for _ in range(n_augmentations)]
-    inputs = torch.stack(inputs).to(device)
-    return inputs
 
 
 @ADAPTATION_REGISTRY.register()
@@ -22,19 +10,12 @@ class TTAug(TTAMethod):
     def __init__(self, cfg, model, num_classes):
         super().__init__(cfg, model, num_classes)
 
-        self.alpha_bn = cfg.BN.ALPHA
-        self.n_augmentations = cfg.TEST.N_AUGMENTATIONS
-        self.augmentations = aug_cifar if "cifar" in self.dataset_name else aug_imagenet
         self.model_state, _ = self.copy_model_and_optimizer()
 
     @torch.no_grad()
     def forward(self, x):
-        if self.episodic:
-            self.reset()
-
-        x_aug = tta(x, self.n_augmentations, aug=self.augmentations, device=self.device)
+        x_aug = torch.cat(x, dim=0)
         outputs = self.model(x_aug).mean(0, keepdim=True)
-
         return outputs
 
     def copy_model_and_optimizer(self):
@@ -46,5 +27,5 @@ class TTAug(TTAMethod):
         self.model.load_state_dict(self.model_state, strict=True)
 
     def configure_model(self):
-        self.model = AlphaBatchNorm.adapt_model(self.model, alpha=self.alpha_bn)
+        self.model = AlphaBatchNorm.adapt_model(self.model, alpha=self.cfg.BN.ALPHA)
         self.model.requires_grad_(False)

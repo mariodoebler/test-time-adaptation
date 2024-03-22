@@ -177,11 +177,11 @@ _C.RMT.LAMBDA_CE_TRG = 1.0          # Lambda for self-training
 _C.RMT.LAMBDA_CONT = 1.0            # Lambda for contrastive learning
 _C.RMT.NUM_SAMPLES_WARM_UP = 50000  # Number of samples used during the mean teacher warm-up
 
-# --------------------------------- SANTA options ----------------------------- #
+# --------------------------------- SANTA options --------------------------- #
 _C.SANTA = CfgNode()
 
-_C.SANTA.LAMBDA_CE_TRG = 1.0          # Lambda for self-training
-_C.SANTA.LAMBDA_CONT = 1.0            # Lambda for contrastive learning
+_C.SANTA.LAMBDA_CE_TRG = 1.0        # Lambda for self-training
+_C.SANTA.LAMBDA_CONT = 1.0          # Lambda for contrastive learning
 
 # --------------------------------- AdaContrast options --------------------- #
 _C.ADACONTRAST = CfgNode()
@@ -198,7 +198,7 @@ _C.ADACONTRAST.CE_SUP_TYPE = "weak_strong"  # ["weak_all", "weak_weak", "weak_st
 _C.ADACONTRAST.REFINE_METHOD = "nearest_neighbors"
 _C.ADACONTRAST.NUM_NEIGHBORS = 10
 
-# --------------------------------- LAME options ----------------------------- #
+# --------------------------------- LAME options ---------------------------- #
 _C.LAME = CfgNode()
 
 _C.LAME.AFFINITY = "rbf"
@@ -214,6 +214,7 @@ _C.EATA.FISHER_ALPHA = 2000.0
 
 # Diversity margin
 _C.EATA.D_MARGIN = 0.05
+_C.EATA.MARGIN_E0 = 0.4             # Will be multiplied by: EATA.MARGIN_E0 * math.log(num_classes)
 
 # --------------------------------- SAR options ---------------------------- #
 _C.SAR = CfgNode()
@@ -221,7 +222,7 @@ _C.SAR = CfgNode()
 # Threshold e_m for model recovery scheme
 _C.SAR.RESET_CONSTANT_EM = 0.2
 
-# --------------------------------- ROTTA options ---------------------------- #
+# --------------------------------- ROTTA options -------------------------- #
 _C.ROTTA = CfgNode()
 
 _C.ROTTA.MEMORY_SIZE = 64
@@ -237,7 +238,7 @@ _C.RPL = CfgNode()
 # Q value of GCE loss
 _C.RPL.Q = 0.8
 
-# --------------------------------- ROID options ---------------------------- #
+# --------------------------------- ROID options --------------------------- #
 _C.ROID = CfgNode()
 
 _C.ROID.USE_WEIGHTING = True        # Whether to use loss weighting
@@ -247,7 +248,7 @@ _C.ROID.MOMENTUM_SRC = 0.99         # Momentum for weight ensembling (param * mo
 _C.ROID.MOMENTUM_PROBS = 0.9        # Momentum for diversity weighting
 _C.ROID.TEMPERATURE = 1/3           # Temperature for weights
 
-# ------------------------------- Source options ---------------------------- #
+# ------------------------------- Source options -------------------------- #
 _C.SOURCE = CfgNode()
 
 # Number of workers for source data loading
@@ -259,7 +260,7 @@ _C.SOURCE.PERCENTAGE = 1.0   # (0, 1] Possibility to reduce the number of source
 # Possibility to define the number of source samples. The default setting corresponds to all source samples
 _C.SOURCE.NUM_SAMPLES = -1
 
-# ------------------------------- Testing options --------------------------- #
+# ------------------------------- Testing options ------------------------- #
 _C.TEST = CfgNode()
 
 # Number of workers for test data loading
@@ -276,6 +277,9 @@ _C.TEST.N_AUGMENTATIONS = 32
 
 # The value of the Dirichlet distribution used for sorting the class labels.
 _C.TEST.DELTA_DIRICHLET = 0.0
+
+# Debuging mode
+_C.TEST.DEBUG = False
 
 # --------------------------------- CUDNN options --------------------------- #
 _C.CUDNN = CfgNode()
@@ -398,10 +402,10 @@ def complete_data_dir_path(data_root_dir: str, dataset_name: str):
 
 def get_num_classes(dataset_name: str):
     dataset_name2num_classes = {"cifar10": 10, "cifar10_c": 10, "cifar100": 100,  "cifar100_c": 100,
-                                "imagenet": 1000, "imagenet_v2": 1000, "imagenet_c": 1000,
+                                "imagenet": 1000, "imagenet_v2": 1000, "imagenet_c": 1000, "ccc": 1000,
                                 "imagenet_k": 1000, "imagenet_r": 200, "imagenet_a": 200,
                                 "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
-                                "domainnet126": 126, "ccc": 1000
+                                "domainnet126": 126
                                 }
     assert dataset_name in dataset_name2num_classes.keys(), \
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(dataset_name2num_classes.keys())}"

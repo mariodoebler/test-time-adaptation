@@ -2,6 +2,7 @@ import logging
 import torch
 import torch.nn as nn
 from torch.nn.utils.weight_norm import WeightNorm
+from torchvision import transforms
 
 from copy import deepcopy
 from models.model import ResNetDomainNet126
@@ -26,11 +27,24 @@ class TTAMethod(nn.Module):
         self.performed_updates = 0
         self.reset_after_num_updates = cfg.MODEL.RESET_AFTER_NUM_UPDATES
 
+        # restore the image input size from the model pre-processing if it is defined
+        # this is required for methods relying on test-time augmentation
+        self.img_size = (32, 32) if "cifar" in self.dataset_name else (224, 224)
+        if hasattr(self.model, "model_preprocess") and isinstance(self.model.model_preprocess, transforms.Compose):
+            for transf in self.model.model_preprocess.transforms[::-1]:
+                if hasattr(transf, "size"):
+                    self.img_size = getattr(transf, "size")
+                    if self.dataset_name in ["imagenet_c", "ccc"] and max(self.img_size) > 224:
+                        raise ValueError(f"The specified model with pre-processing {model.model_preprocess} "
+                                         f"is not suited in combination with ImageNet-C and CCC! "
+                                         f"These datasets are already resized and center cropped to 224")
+                    break
+
         # configure model and optimizer
         self.configure_model()
         self.params, param_names = self.collect_params()
         self.optimizer = self.setup_optimizer() if len(self.params) > 0 else None
-        self.print_amount_trainable_params()
+        self.num_trainable_params, self.num_total_params = self.get_number_trainable_params()
 
         # variables needed for single sample test-time adaptation (sstta) using a sliding window (buffer) approach
         self.input_buffer = None
@@ -102,7 +116,8 @@ class TTAMethod(nn.Module):
 
     @torch.enable_grad()  # ensure grads in possible no grad context for testing
     def forward_and_adapt(self, x):
-        """Forward and adapt model on batch of data.
+        """
+        Forward and adapt the model on a batch of data.
         """
         raise NotImplementedError
 
@@ -150,12 +165,14 @@ class TTAMethod(nn.Module):
         else:
             raise NotImplementedError
 
-    def print_amount_trainable_params(self):
+    def get_number_trainable_params(self):
         trainable = sum(p.numel() for p in self.params) if len(self.params) > 0 else 0
         total = sum(p.numel() for p in self.model.parameters())
-        logger.info(f"#Trainable/total parameters: {trainable}/{total} \t Fraction: {trainable / total * 100:.2f}% ")
+        logger.info(f"#Trainable/total parameters: {trainable:,}/{total:,} \t Ratio: {trainable / total * 100:.3f}% ")
+        return trainable, total
 
     def reset(self):
+        """Reset the model and optimizer state to the initial source state"""
         if self.model_states is None or self.optimizer_state is None:
             raise Exception("cannot reset without saved model/optimizer state")
         self.load_model_and_optimizer()

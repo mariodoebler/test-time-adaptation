@@ -11,6 +11,7 @@ from copy import deepcopy
 from methods.base import TTAMethod
 from augmentations.transforms_cotta import get_tta_transforms
 from utils.registry import ADAPTATION_REGISTRY
+from utils.misc import ema_update_model
 
 
 @ADAPTATION_REGISTRY.register()
@@ -21,7 +22,7 @@ class RoTTA(TTAMethod):
         self.memory_size = cfg.ROTTA.MEMORY_SIZE
         self.lambda_t = cfg.ROTTA.LAMBDA_T
         self.lambda_u = cfg.ROTTA.LAMBDA_U
-        self.nu = cfg.ROTTA.NU
+        self.nu = 1 - cfg.ROTTA.NU  # we do the ema update consistently the other way round: (param * ema_model + (1-param) * model)
         self.update_frequency = cfg.ROTTA.UPDATE_FREQUENCY  # actually the same as the size of memory bank
         self.current_instance = 0
         self.mem = CSTU(capacity=self.memory_size, num_class=self.num_classes, lambda_t=self.lambda_t, lambda_u=self.lambda_u)
@@ -37,7 +38,7 @@ class RoTTA(TTAMethod):
         self.model_states, self.optimizer_state = self.copy_model_and_optimizer()
 
         # create the test-time transformations
-        self.transform = get_tta_transforms(self.dataset_name)
+        self.transform = get_tta_transforms(self.img_size)
 
     @torch.enable_grad()
     def forward_and_adapt(self, x):
@@ -84,7 +85,13 @@ class RoTTA(TTAMethod):
             l.backward()
             self.optimizer.step()
 
-        self.update_ema_variables(self.model_ema, self.model, self.nu)
+            self.model_ema = ema_update_model(
+                model_to_update=self.model_ema,
+                model_to_merge=self.model,
+                momentum=self.nu,
+                device=self.device,
+                update_all=True
+            )
 
     def reset(self):
         if self.model_states is None or self.optimizer_state is None:
@@ -95,12 +102,6 @@ class RoTTA(TTAMethod):
                         num_class=self.num_classes,
                         lambda_t=self.lambda_t,
                         lambda_u=self.lambda_u)
-
-    @staticmethod
-    def update_ema_variables(ema_model, model, nu):
-        for ema_param, param in zip(ema_model.parameters(), model.parameters()):
-            ema_param.data[:] = (1 - nu) * ema_param[:].data[:] + nu * param[:].data[:]
-        return ema_model
 
     def configure_model(self):
         self.model.requires_grad_(False)

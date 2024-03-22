@@ -9,15 +9,7 @@ from models.model import ResNetDomainNet126
 from augmentations.transforms_cotta import get_tta_transforms
 from utils.registry import ADAPTATION_REGISTRY
 from utils.losses import Entropy, SymmetricCrossEntropy, SoftLikelihoodRatio
-
-
-@torch.no_grad()
-def update_model_variables(model, src_model, device, alpha=0.99):
-    if alpha < 1.0:
-        for param, src_param in zip(model.parameters(), src_model.parameters()):
-            if param.requires_grad:
-                param.data[:] = alpha * param[:].data[:] + (1 - alpha) * src_param[:].data[:].to(device)
-    return model
+from utils.misc import ema_update_model
 
 
 @torch.no_grad()
@@ -38,7 +30,7 @@ class ROID(TTAMethod):
         self.temperature = cfg.ROID.TEMPERATURE
         self.batch_size = cfg.TEST.BATCH_SIZE
         self.class_probs_ema = 1 / self.num_classes * torch.ones(self.num_classes).to(self.device)
-        self.tta_transform = get_tta_transforms(self.dataset_name, padding_mode="reflect", cotta_augs=False)
+        self.tta_transform = get_tta_transforms(self.img_size, padding_mode="reflect", cotta_augs=False)
 
         # setup loss functions
         self.slr = SoftLikelihoodRatio()
@@ -102,7 +94,13 @@ class ROID(TTAMethod):
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()
-        self.model = update_model_variables(self.model, self.src_model, self.device, self.momentum_src)
+
+        self.model = ema_update_model(
+            model_to_update=self.model,
+            model_to_merge=self.src_model,
+            momentum=self.momentum_src,
+            device=self.device
+        )
 
         if self.use_prior_correction:
             prior = outputs.softmax(1).mean(0)

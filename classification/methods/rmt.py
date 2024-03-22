@@ -13,14 +13,9 @@ from augmentations.transforms_cotta import get_tta_transforms
 from datasets.data_loading import get_source_loader
 from utils.registry import ADAPTATION_REGISTRY
 from utils.losses import SymmetricCrossEntropy
+from utils.misc import ema_update_model
 
 logger = logging.getLogger(__name__)
-
-
-def update_ema_variables(ema_model, model, alpha_teacher):
-    for ema_param, param in zip(ema_model.parameters(), model.parameters()):
-        ema_param.data[:] = alpha_teacher * ema_param[:].data[:] + (1 - alpha_teacher) * param[:].data[:]
-    return ema_model
 
 
 @ADAPTATION_REGISTRY.register()
@@ -53,7 +48,7 @@ class RMT(TTAMethod):
         arch_name = cfg.MODEL.ARCH
         ckpt_path = cfg.MODEL.CKPT_PATH
 
-        self.tta_transform = get_tta_transforms(self.dataset_name)
+        self.tta_transform = get_tta_transforms(self.img_size)
 
         # setup loss functions
         self.symmetric_cross_entropy = SymmetricCrossEntropy()
@@ -169,7 +164,13 @@ class RMT(TTAMethod):
             self.optimizer.step()
             self.optimizer.zero_grad()
 
-            self.model_ema = update_ema_variables(ema_model=self.model_ema, model=self.model, alpha_teacher=self.m_teacher_momentum)
+            self.model_ema = ema_update_model(
+                model_to_update=self.model_ema,
+                model_to_merge=self.model,
+                momentum=self.m_teacher_momentum,
+                device=self.device,
+                update_all=True
+            )
 
         logger.info(f"Finished warm up...")
         for par in self.optimizer.param_groups:
@@ -243,7 +244,7 @@ class RMT(TTAMethod):
         outputs_test = self.classifier(features_test)
 
         # forward augmented test data
-        features_aug_test = self.feature_extractor(self.tta_transform((imgs_test)))
+        features_aug_test = self.feature_extractor(self.tta_transform(imgs_test))
         outputs_aug_test = self.classifier(features_aug_test)
 
         # forward original test data through the ema model
@@ -287,8 +288,13 @@ class RMT(TTAMethod):
 
         self.optimizer.step()
 
-        self.model_ema = update_ema_variables(ema_model=self.model_ema, model=self.model, alpha_teacher=self.m_teacher_momentum)
-
+        self.model_ema = ema_update_model(
+            model_to_update=self.model_ema,
+            model_to_merge=self.model,
+            momentum=self.m_teacher_momentum,
+            device=self.device,
+            update_all=True
+        )
         # create and return the ensemble prediction
         return outputs_test + outputs_ema
 

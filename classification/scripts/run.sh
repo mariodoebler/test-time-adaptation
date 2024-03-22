@@ -2,7 +2,7 @@
 
 conda activate tta
 
-method=roid       # choose from: source, norm_test, tent, rpl, eta, eata, rdump, sar, cotta, rotta, adacontrast, rmt, gtta, lame, roid
+method=roid       # choose from: source, norm_test, tent, rpl, eta, eata, rdump, sar, cotta, rotta, adacontrast, lame, deyo, cmf, rmt, gtta, roid
 setting=continual # choose from: continual, mixed_domains, correlated, mixed_domains_correlated, ccc
 seeds=(1)         # to reproduce the benchmark results, use: (1 2 3 4 5)
 options=()        # for RMT source-free without warm-up use: options=("RMT.LAMBDA_CE_SRC 0.0 RMT.NUM_SAMPLES_WARM_UP 0")

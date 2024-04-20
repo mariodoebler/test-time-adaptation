@@ -91,8 +91,7 @@ class EATA(TTAMethod):
 
         # filter redundant samples
         if self.current_model_probs is not None:
-            cosine_similarities = F.cosine_similarity(self.current_model_probs.unsqueeze(dim=0),
-                                                      outputs[filter_ids_1].softmax(1), dim=1)
+            cosine_similarities = F.cosine_similarity(self.current_model_probs.unsqueeze(dim=0), outputs[filter_ids_1].softmax(1), dim=1)
             filter_ids_2 = torch.where(torch.abs(cosine_similarities) < self.d_margin)
             entropys = entropys[filter_ids_2]
             updated_probs = update_model_probs(self.current_model_probs, outputs[filter_ids_1][filter_ids_2].softmax(1))
@@ -118,22 +117,27 @@ class EATA(TTAMethod):
         self.num_samples_update_1 += filter_ids_1[0].size(0)
         self.num_samples_update_2 += entropys.size(0)
         self.current_model_probs = updated_probs
-        return outputs, loss
+        perform_update = len(entropys) != 0
+        return outputs, loss, perform_update
 
     @torch.enable_grad()
     def forward_and_adapt(self, x):
         if self.mixed_precision and self.device == "cuda":
             with torch.cuda.amp.autocast():
-                outputs, loss = self.loss_calculation(x)
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+                outputs, loss, perform_update = self.loss_calculation(x)
+            # update model only if not all instances have been filtered
+            if perform_update:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
             self.optimizer.zero_grad()
         else:
-            outputs, loss = self.loss_calculation(x)
-            loss.backward()
-            self.optimizer.step()
-            self.optimizer.zero_grad()    
+            outputs, loss, perform_update = self.loss_calculation(x)
+            # update model only if not all instances have been filtered
+            if perform_update:
+                loss.backward()
+                self.optimizer.step()
+            self.optimizer.zero_grad()
         return outputs
 
     def reset(self):

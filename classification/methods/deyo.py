@@ -34,20 +34,18 @@ class DeYO(TTAMethod):
         self.patch_len = cfg.DEYO.PATCH_LEN
 
         self.ent = Entropy()
-
     def loss_calculation(self, x):
         """Forward and adapt model on batch of data.
         Measure entropy of the model prediction, take gradients, and update params.
         """
         imgs_test = x[0]
         outputs = self.model(imgs_test)
-        
+
         entropys = self.ent(outputs)
         filter_ids_1 = torch.where((entropys < self.deyo_margin))
         entropys = entropys[filter_ids_1]
-        backward = len(entropys)
-        if backward == 0:
-            loss = torch.tensor([(float('nan'))])
+        if len(entropys) == 0:
+            loss = None  # set loss to None, since all instances have been filtered
             return outputs, loss
 
         x_prime = imgs_test[filter_ids_1]
@@ -70,10 +68,10 @@ class DeYO(TTAMethod):
             x_prime = rearrange(x_prime, 'b c h w -> b c (h w)')
             x_prime = x_prime[:, :, torch.randperm(x_prime.shape[-1])]
             x_prime = rearrange(x_prime, 'b c (ps1 ps2) -> b c ps1 ps2', ps1=imgs_test.shape[-1], ps2=imgs_test.shape[-1])
-    
+
         with torch.no_grad():
             outputs_prime = self.model(x_prime)
-        
+
         prob_outputs = outputs[filter_ids_1].softmax(1)
         prob_outputs_prime = outputs_prime.softmax(1)
 
@@ -81,9 +79,13 @@ class DeYO(TTAMethod):
 
         plpd = torch.gather(prob_outputs, dim=1, index=cls1.reshape(-1, 1)) - torch.gather(prob_outputs_prime, dim=1, index=cls1.reshape(-1, 1))
         plpd = plpd.reshape(-1)
-        
+
         filter_ids_2 = torch.where(plpd > self.plpd_threshold)
         entropys = entropys[filter_ids_2]
+        if len(entropys) == 0:
+            loss = None  # set loss to None, since all instances have been filtered
+            return outputs, loss
+
         plpd = plpd[filter_ids_2]
 
         if self.reweight_ent or self.reweight_plpd:
@@ -91,8 +93,8 @@ class DeYO(TTAMethod):
                      float(self.reweight_plpd) * (1. / (torch.exp(-1. * plpd.clone().detach())))
                      )
             entropys = entropys.mul(coeff)
-        loss = entropys.mean(0)
 
+        loss = entropys.mean(0)
         return outputs, loss
 
     @torch.enable_grad()
@@ -100,15 +102,19 @@ class DeYO(TTAMethod):
         if self.mixed_precision and self.device == "cuda":
             with torch.cuda.amp.autocast():
                 outputs, loss = self.loss_calculation(x)
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            # update model only if not all instances have been filtered
+            if loss is not None:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
             self.optimizer.zero_grad()
         else:
             outputs, loss = self.loss_calculation(x)
-            loss.backward()
-            self.optimizer.step()
-            self.optimizer.zero_grad()    
+            # update model only if not all instances have been filtered
+            if loss is not None:
+                loss.backward()
+                self.optimizer.step()
+            self.optimizer.zero_grad()
         return outputs
 
     def collect_params(self):

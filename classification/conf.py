@@ -69,12 +69,10 @@ _C.MODEL = CfgNode()
 # Torchvision: https://pytorch.org/vision/0.14/models.html
 # timm: https://github.com/huggingface/pytorch-image-models/tree/v0.6.13
 # RobustBench: https://github.com/RobustBench/robustbench
-# OpenCLIP: https://github.com/mlfoundations/open_clip
 _C.MODEL.ARCH = 'Standard'
 
 # Type of pre-trained weights
 # For torchvision models see: https://pytorch.org/vision/0.14/models.html
-# For OpenClip models, use either 'openai' (for the original OpenAI weights) or see https://github.com/mlfoundations/open_clip
 _C.MODEL.WEIGHTS = "IMAGENET1K_V1"
 
 # Path to a specific checkpoint

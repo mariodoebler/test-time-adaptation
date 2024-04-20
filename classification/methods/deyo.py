@@ -34,6 +34,7 @@ class DeYO(TTAMethod):
         self.patch_len = cfg.DEYO.PATCH_LEN
 
         self.ent = Entropy()
+
     def loss_calculation(self, x):
         """Forward and adapt model on batch of data.
         Measure entropy of the model prediction, take gradients, and update params.

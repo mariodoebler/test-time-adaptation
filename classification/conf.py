@@ -69,11 +69,16 @@ _C.MODEL = CfgNode()
 # Torchvision: https://pytorch.org/vision/0.14/models.html
 # timm: https://github.com/huggingface/pytorch-image-models/tree/v0.6.13
 # RobustBench: https://github.com/RobustBench/robustbench
+# OpenCLIP: https://github.com/mlfoundations/open_clip
 _C.MODEL.ARCH = 'Standard'
 
 # Type of pre-trained weights
 # For torchvision models see: https://pytorch.org/vision/0.14/models.html
+# For OpenClip models, use either 'openai' (for the original OpenAI weights) or see https://github.com/mlfoundations/open_clip/blob/main/docs/openclip_results.csv
 _C.MODEL.WEIGHTS = "IMAGENET1K_V1"
+
+# Whether to use a CLIP based architecture
+_C.MODEL.USE_CLIP = False
 
 # Path to a specific checkpoint
 _C.MODEL.CKPT_PATH = ""
@@ -272,6 +277,23 @@ _C.CMF.GAMMA = 0.99
 _C.CMF.Q = 0.005
 _C.CMF.TYPE = "lp"
 
+# ------------------------------- CLIP options ---------------------------- #
+_C.CLIP = CfgNode()
+
+_C.CLIP.PROMPT_MODE = "custom"                  # Choose from: custom, ensemble, cupl, all_prompts
+_C.CLIP.PROMPT_TEMPLATE = ["a photo of a {}."]  # List of custom prompt templates
+_C.CLIP.PROMPT_PATH = "datasets/cupl_prompts/CuPL_ImageNet_prompts.json" # Path to .json file containing CuPL prompts for example
+_C.CLIP.PRECISION = "fp16"                      # Precision of the restored weights
+_C.CLIP.FREEZE_TEXT_ENCODER = True              # Whether to freeze the text encoder in ZeroShotCLIP
+
+# ------------------------------- TPT options ----------------------------- #
+_C.TPT = CfgNode()
+
+_C.TPT.SELECTION_P = 0.1            # Percentile of the most certain prediction
+_C.TPT.N_CTX = 4                    # Number of tunable context tokens
+_C.TPT.CTX_INIT = "a_photo_of_a"    # Context initialization
+_C.TPT.CLASS_TOKEN_POS = "end"      # Position of the class token. Choose from: [end, middle, front]
+
 # ------------------------------- Source options -------------------------- #
 _C.SOURCE = CfgNode()
 
@@ -417,11 +439,46 @@ def complete_data_dir_path(data_root_dir: str, dataset_name: str):
                "cifar10_c": "",     # do not change
                "cifar100": "",      # do not change
                "cifar100_c": "",    # do not change
+               "caltech101": os.path.join("caltech101", "101_ObjectCategories"),
+               "dtd": os.path.join("dtd", "dtd", "images"),
+               "eurosat": os.path.join("eurosat", "2750"),                      # automatic download fails
+               "fgvc_aircraft": os.path.join("fgvc-aircraft-2013b", "data"),    # do not add 'images' in path
+               "flowers102": os.path.join("flowers-102", "jpg"),
+               "food101": os.path.join("food-101", "images"),
+               "oxford_pets": os.path.join("oxford-iiit-pet", "images"),
+               "stanford_cars": os.path.join("stanford_cars"),                  # automatic download fails
+               "sun397": os.path.join("sun397"),                                # automatic download fails
+               "ucf101": os.path.join("ucf101", "UCF-101-midframes"),           # automatic download fails
                "ccc": "",
                }
     assert dataset_name in mapping.keys(),\
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(mapping.keys())}"
     return os.path.join(data_root_dir, mapping[dataset_name])
+
+
+generalization_dataset_names = [
+    "flowers102", "dtd", "oxford_pets", "stanford_cars", "ucf101",
+    "caltech101", "food101", "sun397", "fgvc_aircraft", "eurosat"
+]
+
+
+def ds_name2pytorch_ds_name(ds_name: str):
+    # converts the dataset name into the pytorch name convention (see: https://pytorch.org/vision/stable/datasets.html)
+    lookup_table = {
+        "flowers102": "Flowers102",
+        "dtd": "DTD",
+        "oxford_pets": "OxfordIIITPet",
+        "stanford_cars": "StanfordCars",
+        "ucf101": "UCF101",
+        "caltech101": "Caltech101",
+        "food101": "Food101",
+        "sun397": "SUN397",
+        "fgvc_aircraft": "FGVCAircraft",
+        "eurosat": "EuroSAT",
+    }
+    assert ds_name in lookup_table.keys(), \
+        f"There is no mapping for dataset name '{ds_name}'! Supported dataset names are: {list(lookup_table.keys())}"
+    return lookup_table[ds_name]
 
 
 def get_num_classes(dataset_name: str):
@@ -430,6 +487,9 @@ def get_num_classes(dataset_name: str):
                                 "imagenet_k": 1000, "imagenet_r": 200, "imagenet_a": 200,
                                 "imagenet_d": 164, "imagenet_d109": 109, "imagenet200": 200,
                                 "domainnet126": 126,
+                                "eurosat": 10, "flowers102": 102, "oxford_pets": 37,
+                                "dtd": 47, "food101": 101, "sun397": 397, "caltech101": 100,
+                                "ucf101": 101, "stanford_cars": 196, "fgvc_aircraft": 100
                                 }
     assert dataset_name in dataset_name2num_classes.keys(), \
         f"Dataset '{dataset_name}' is not supported! Choose from: {list(dataset_name2num_classes.keys())}"

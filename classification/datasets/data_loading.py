@@ -10,8 +10,8 @@ import torchvision
 import torchvision.transforms as transforms
 
 from typing import Union
-from conf import complete_data_dir_path
-from datasets.imagelist_dataset import ImageList
+from conf import complete_data_dir_path, generalization_dataset_names, ds_name2pytorch_ds_name
+from datasets.imagelist_dataset import ImageList, FGVCAircraft
 from datasets.imagenet_subsets import create_imagenet_subset
 from datasets.corruptions_datasets import create_cifarc_dataset, create_imagenetc_dataset
 from datasets.imagenet_d_utils import create_symlinks_and_get_imagenet_visda_mapping
@@ -27,7 +27,7 @@ def identity(x):
     return x
 
 
-def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transforms.Compose, None], n_views: int = 64):
+def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transforms.Compose, None], use_clip: bool, n_views: int = 64):
     """
     Get the transformation pipeline
     Note that the data normalization is done within the model
@@ -35,11 +35,22 @@ def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transfor
         dataset_name: Name of the dataset
         adaptation: Name of the adaptation method
         preprocess: Input pre-processing from restored model (if available)
+        use_clip: If the underlying model is based on CLIP
         n_views Number of views for test-time augmentation
     Returns:
         transforms: The data pre-processing (and augmentation)
     """
-    if adaptation in ["memo", "ttaug"]:
+    if use_clip:
+        if adaptation in ["tpt", "vte"]:
+            base_transform = transforms.Compose([preprocess.transforms[0], preprocess.transforms[1]])
+            preproc = transforms.Compose([transforms.ToTensor()])  # the input normalization is done within the model
+            use_augmix = True if dataset_name in generalization_dataset_names else False
+            transform = AugMixAugmenter(base_transform, preproc, dataset_name=dataset_name,
+                                        n_views=n_views-1, use_augmix=use_augmix)
+        else:
+            transform = preprocess
+
+    elif adaptation in ["memo", "ttaug"]:
         base_transform = transforms.Compose([preprocess.transforms[0], preprocess.transforms[1]]) if preprocess else None
         preproc = transforms.Compose([transforms.ToTensor()])
         transform = AugMixAugmenter(base_transform, preproc, dataset_name=dataset_name, n_views=n_views, use_augmix=True)
@@ -92,7 +103,7 @@ def get_transform(dataset_name: str, adaptation: str, preprocess: Union[transfor
 
 def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess: Union[transforms.Compose, None],
                     data_root_dir: str, domain_name: str, domain_names_all: list, severity: int, num_examples: int,
-                    rng_seed: int, n_views: int = 64, delta_dirichlet: float = 0.,
+                    rng_seed: int, use_clip: bool, n_views: int = 64, delta_dirichlet: float = 0.,
                     batch_size: int = 128, shuffle: bool = False, workers: int = 4):
     """
     Create the test data loader
@@ -107,6 +118,7 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
         severity: Severity level in case of corrupted data
         num_examples: Number of test samples for the current domain
         rng_seed: A seed number
+        use_clip: If the underlying model is based on CLIP
         n_views: Number of views for test-time augmentation
         delta_dirichlet: Parameter of the Dirichlet distribution
         batch_size: The number of samples to process in each iteration
@@ -121,12 +133,12 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
     np.random.seed(rng_seed)
 
     data_dir = complete_data_dir_path(data_root_dir, dataset_name)
-    transform = get_transform(dataset_name, adaptation, preprocess, n_views)
+    transform = get_transform(dataset_name, adaptation, preprocess, use_clip, n_views)
 
     # create the test dataset
     if domain_name == "none":
         test_dataset, _ = get_source_loader(dataset_name, adaptation, preprocess,
-                                            data_root_dir, batch_size, n_views,
+                                            data_root_dir, batch_size, use_clip, n_views,
                                             train_split=False, workers=workers)
     else:
         if dataset_name in ["cifar10_c", "cifar100_c"]:
@@ -178,6 +190,19 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
                                      label_files=data_files,
                                      transform=transform)
 
+        elif dataset_name in generalization_dataset_names:
+            if not os.path.exists(data_dir):
+                # create the corresponding torchvision dataset name
+                ds_name = ds_name2pytorch_ds_name(dataset_name)
+                # use torchvision to download the data
+                eval(f"torchvision.datasets.{ds_name}")(root=data_root_dir, download=True)
+
+            if dataset_name == "fgvc_aircraft":
+                test_dataset = FGVCAircraft(image_root=data_dir, transform=transform, split="test")
+            else:
+                data_list_paths = [os.path.join("datasets", f"other_lists", f"split_zhou_{dataset_name}.json")]
+                test_dataset = ImageList(image_root=data_dir, label_files=data_list_paths, transform=transform, split="test")
+
         else:
             raise ValueError(f"Dataset '{dataset_name}' is not supported!")
 
@@ -211,7 +236,7 @@ def get_test_loader(setting: str, adaptation: str, dataset_name: str, preprocess
 
 
 def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[transforms.Compose, None],
-                      data_root_dir: str, batch_size: int, n_views: int = 64,
+                      data_root_dir: str, batch_size: int, use_clip: bool, n_views: int = 64,
                       train_split: bool = True, ckpt_path: str = None, num_samples: int = -1,
                       percentage: float = 1.0, workers: int = 4):
     """
@@ -222,6 +247,7 @@ def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[tran
         preprocess: Input pre-processing from restored model (if available)
         data_root_dir: Path of the data root directory
         batch_size: The number of samples to process in each iteration
+        use_clip: If the underlying model is based on CLIP
         n_views: Number of views for test-time augmentation
         train_split: Whether to use the training or validation split
         ckpt_path: Path to a checkpoint which determines the source domain for DomainNet-126
@@ -240,7 +266,7 @@ def get_source_loader(dataset_name: str, adaptation: str, preprocess: Union[tran
     data_dir = complete_data_dir_path(data_root_dir, dataset_name=src_dataset_name)
 
     # get the data transformation
-    transform = get_transform(src_dataset_name, adaptation, preprocess, n_views)
+    transform = get_transform(src_dataset_name, adaptation, preprocess, use_clip, n_views)
 
     # create the source dataset
     if dataset_name in ["cifar10", "cifar10_c"]:

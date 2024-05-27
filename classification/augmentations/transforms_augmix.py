@@ -50,8 +50,8 @@ class AugMixAugmenter(object):
 
         self.aug_list = augmix_ops.augmentations if use_augmix else []
 
-        # restore the final image input size from the base transform
         self.img_size = 32 if "cifar" in self.dataset_name else 224
+        # restore the final image input size from the base transform
         if isinstance(base_transform, transforms.Compose):
             for transf in base_transform.transforms[::-1]:
                 if isinstance(transf, (transforms.Resize, transforms.RandomResizedCrop, transforms.RandomCrop, transforms.CenterCrop)):

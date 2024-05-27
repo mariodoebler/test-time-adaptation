@@ -91,6 +91,7 @@ def evaluate(description):
                 severity=severity,
                 num_examples=cfg.CORRUPTION.NUM_EX,
                 rng_seed=cfg.RNG_SEED,
+                use_clip=cfg.MODEL.USE_CLIP,
                 n_views=cfg.TEST.N_AUGMENTATIONS,
                 delta_dirichlet=cfg.TEST.DELTA_DIRICHLET,
                 batch_size=cfg.TEST.BATCH_SIZE,

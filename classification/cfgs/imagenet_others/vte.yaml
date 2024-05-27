@@ -1,0 +1,16 @@
+CORRUPTION:
+  DATASET: imagenet_r
+  SEVERITY:
+    - ""
+  TYPE:
+    - ""
+MODEL:
+  ADAPTATION: vte
+  ARCH: RN50
+  WEIGHTS: openai
+  USE_CLIP: True
+TEST:
+  BATCH_SIZE: 1
+  N_AUGMENTATIONS: 64
+CLIP:
+  PROMPT_MODE: ensemble

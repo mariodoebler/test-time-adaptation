@@ -1,3 +1,4 @@
+import json
 import logging
 
 import timm
@@ -6,6 +7,7 @@ import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 
+from open_clip import create_model_and_transforms, get_tokenizer
 from robustbench.model_zoo.architectures.utils_architectures import normalize_model, ImageNormalizer
 from robustbench.model_zoo.enums import ThreatModel
 from robustbench.utils import load_model
@@ -13,8 +15,12 @@ from robustbench.utils import load_model
 from typing import Union
 from copy import deepcopy
 from models import resnet26
-from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_V2_MASK, IMAGENET_D109_MASK
+from models.custom_clip import ClipTestTimePromptTuning
 from packaging import version
+from datasets.cls_names import get_class_names
+from datasets.imagenet_subsets import IMAGENET_A_MASK, IMAGENET_R_MASK, IMAGENET_V2_MASK, IMAGENET_D109_MASK
+from datasets.prompts import *
+
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +293,88 @@ class TransformerWrapper(torch.nn.Module):
         return x
 
 
+class ZeroShotCLIP(nn.Module):
+    def __init__(self, cfg, model, device, normalize):
+        super().__init__()
+        self.cfg = cfg
+        self.model = model
+        self.device = device
+        self.normalize = normalize
+        self.prompt_mode = cfg.CLIP.PROMPT_MODE
+        self.freeze_text_encoder = cfg.CLIP.FREEZE_TEXT_ENCODER
+        self.class_names = get_class_names(cfg.CORRUPTION.DATASET)
+        self.tokenize = get_tokenizer(cfg.MODEL.ARCH)
+        self.logit_scale = self.model.logit_scale.data
+
+        assert self.prompt_mode in ["custom", "ensemble", "cupl", "all_prompts"]
+
+        # get the prompt templates
+        prompt_templates = cfg.CLIP.PROMPT_TEMPLATE
+        if self.prompt_mode in ["ensemble", "all_prompts"]:
+            try:
+                prompt_templates = eval(f"{cfg.CORRUPTION.DATASET.split('_')[0]}_templates")
+            except NameError:
+                logger.warning(f"Could not find dataset specific prompt templates! Using ImageNet prompt templates!")
+                prompt_templates = eval("imagenet_templates")
+            logger.info(f"Using the following prompt templates: {prompt_templates}")
+
+        if self.prompt_mode not in ["custom", "ensemble"]:
+            # load CuPL prompts
+            with open(cfg.CLIP.PROMPT_PATH) as f:
+                gpt3_prompts = json.load(f)
+            logger.info(f"Successfully restored CuPL prompts from '{cfg.CLIP.PROMPT_PATH}'")
+
+        # extract the text features for faster inference
+        with torch.no_grad():
+            all_texts = []
+            self.text_features = []
+            for c_name in self.class_names:
+                texts = [template.format(c_name) for template in prompt_templates] if self.prompt_mode != "cupl" else []
+                if self.prompt_mode in ["cupl", "all_prompts"]:
+                    texts += [t for t in gpt3_prompts[c_name]]
+
+                all_texts += texts
+                texts = self.tokenize(texts).to(self.device)
+                class_embeddings = model.encode_text(texts)
+                class_embeddings = class_embeddings / class_embeddings.norm(dim=-1, keepdim=True)
+                class_embedding = class_embeddings.mean(dim=0)
+                class_embedding = class_embedding / class_embedding.norm()
+                self.text_features.append(class_embedding)
+
+            self.text_features = torch.stack(self.text_features, dim=0).to(self.device)
+            self.tokenized_texts_all = self.tokenize(all_texts).to(self.device)
+
+        # prevents test-time adaptation methods from unfreezing parameters in the text encoder
+        if self.freeze_text_encoder:
+            self.model.transformer = None
+
+    @property
+    def dtype(self):
+        return next(self.model.visual.parameters()).dtype
+
+    def forward(self, imgs_test, return_features=False):
+        # normalize the input images
+        imgs_test = self.normalize(imgs_test.type(self.dtype))
+
+        if self.freeze_text_encoder or self.cfg.MODEL.ADAPTATION == "source" or "norm" in self.cfg.MODEL.ADAPTATION:
+            # get and normalize the image features
+            img_features = self.model.encode_image(imgs_test)
+            img_features = img_features / img_features.norm(dim=1, keepdim=True)
+
+            # use pre-extracted text features since no text encoder updates are performed
+            text_features = self.text_features
+        else:
+            img_features, text_features, _ = self.model(imgs_test, self.tokenized_texts_all)
+
+        # cosine similarity as logits
+        logits_per_image = self.logit_scale.exp() * img_features @ text_features.T
+
+        if return_features:
+            return logits_per_image, img_features, text_features
+        else:
+            return logits_per_image
+
+
 def get_model(cfg, num_classes: int, device: Union[str, torch.device]):
     """
     Setup the pre-defined model architecture and restore the corresponding pre-trained weights
@@ -300,7 +388,35 @@ def get_model(cfg, num_classes: int, device: Union[str, torch.device]):
     """
     preprocess = None
 
-    if cfg.CORRUPTION.DATASET == "domainnet126":
+    if cfg.MODEL.USE_CLIP:
+        # load pre-trained CLIP model
+        base_model, _, preprocess = create_model_and_transforms(cfg.MODEL.ARCH,
+                                                                pretrained=cfg.MODEL.WEIGHTS,
+                                                                device=device,
+                                                                precision=cfg.CLIP.PRECISION)
+        # get the image input normalization
+        normalization = preprocess.transforms[-1]
+        # remove the input normalization from the pre-processing as it will be added to the model
+        preprocess.transforms = preprocess.transforms[:-1]
+
+        if cfg.MODEL.ADAPTATION == "tpt":
+            base_model = ClipTestTimePromptTuning(base_model, normalization,
+                                                  cfg.MODEL.ARCH, cfg.CORRUPTION.DATASET,
+                                                  n_ctx=cfg.TPT.N_CTX, ctx_init=cfg.TPT.CTX_INIT,
+                                                  class_token_pos=cfg.TPT.CLASS_TOKEN_POS)
+            if cfg.MODEL.CKPT_PATH:
+                # Initiaize context prompts with CoOp pre-trained prompts (see: https://github.com/KaiyangZhou/CoOp?tab=readme-ov-file)
+                # or download them from here: https://drive.google.com/file/d/18ypxfd82RR0pizc5MM1ZWDYDk4j0BtPF/view
+                pretrained_ctx = torch.load(cfg.MODEL.CKPT_PATH)['state_dict']['ctx']
+                assert pretrained_ctx.shape[0] == cfg.TPT.N_CTX
+                with torch.no_grad():
+                    base_model.prompt_learner.ctx.copy_(pretrained_ctx)
+                    base_model.prompt_learner.ctx_init_state = pretrained_ctx
+                logger.info("Successfully restored pre-trained soft prompt (CoOp)")
+        else:
+            base_model = ZeroShotCLIP(cfg, base_model, device, normalize=normalization)
+
+    elif cfg.CORRUPTION.DATASET == "domainnet126":
         base_model = ResNetDomainNet126(arch=cfg.MODEL.ARCH, checkpoint_path=cfg.MODEL.CKPT_PATH, num_classes=num_classes)
     else:
         try:

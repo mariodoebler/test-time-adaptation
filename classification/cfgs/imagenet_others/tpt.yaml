@@ -1,0 +1,23 @@
+CORRUPTION:
+  DATASET: imagenet_r
+  SEVERITY:
+    - ""
+  TYPE:
+    - ""
+MODEL:
+  ADAPTATION: tpt
+  ARCH: RN50
+  WEIGHTS: openai
+  USE_CLIP: True
+  EPISODIC: True
+OPTIM:
+  LR: 0.005
+  METHOD: AdamW
+  STEPS: 1
+  BETA: 0.9
+  WD: 0.01
+TEST:
+  BATCH_SIZE: 1
+  N_AUGMENTATIONS: 64
+CLIP:
+  PRECISION: "fp32"

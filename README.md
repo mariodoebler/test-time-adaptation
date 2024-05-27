@@ -3,6 +3,7 @@ This is an open source online test-time adaptation repository based on PyTorch. 
 - [Introducing Intermediate Domains for Effective Self-Training during Test-Time](https://arxiv.org/abs/2208.07736)
 - [Robust Mean Teacher for Continual and Gradual Test-Time Adaptation](https://arxiv.org/abs/2211.13081) (CVPR2023)
 - [Universal Test-time Adaptation through Weight Ensembling, Diversity Weighting, and Prior Correction](https://arxiv.org/abs/2306.00650) (WACV2024)
+- [A Lost Opportunity for Vision-Language Models: A Comparative Study of Online Test-time Adaptation for Vision-Language Models](https://arxiv.org/abs/2405.14977) (CVPR2024 MAT Workshop Community Track)
 
 <details>
 <summary>Cite</summary>
@@ -49,15 +50,12 @@ conda activate tta
 ```
 
 ## Classification
-This repository contains an extensive collection of different methods, datasets and settings,
-which we evaluate in a comprehensive benchmark. We provide detailed results for each method [here](https://docs.google.com/spreadsheets/d/1xR-3df5xMMsEcMHe4Vo495E35RrIPs5abcR7Pztvucw/edit?usp=drive_link),
-which is updated regularly as new methods or datasets are added to the repository.
-Further information on the settings can also be found in our [paper](https://arxiv.org/abs/2306.00650).
-
 <details open>
 <summary>Features</summary>
 
-This repository allows to study a wide range of different datasets, models, settings, and methods. A quick overview is given below:
+This repository contains an extensive collection of different methods, datasets, models and settings,
+which we evaluate in a comprehensive benchmark (see below). We also provide a tutorial on how to use this 
+repository in combination with CLIP-like models [here](tutorials/tutorial_clip.md). A short overview is given below:
 
 - **Datasets**
   - `cifar10_c` [CIFAR10-C](https://zenodo.org/record/2535967#.ZBiI7NDMKUk)
@@ -73,10 +71,11 @@ This repository allows to study a wide range of different datasets, models, sett
   - `Continually Changing Corruptions` [CCC](https://github.com/oripress/CCC)
 
 - **Models**
-  - For adapting to ImageNet variations, all pre-trained models available in [Torchvision](https://pytorch.org/vision/0.14/models.html) or [timm](https://github.com/huggingface/pytorch-image-models/tree/v0.6.13) can be used.
+  - For adapting to ImageNet variations, all pre-trained models available in [Torchvision](https://pytorch.org/vision/stable/models.html) or [timm](https://github.com/huggingface/pytorch-image-models?tab=readme-ov-file#models) can be used.
   - For the corruption benchmarks, pre-trained models from [RobustBench](https://github.com/RobustBench/robustbench) can be used.
   - For the DomainNet-126 benchmark, there is a pre-trained model for each domain.
   - Further models include [ResNet-26 GN](https://github.com/zhangmarvin/memo).
+  - It is also possible to use the models provided by [OpenCLIP](https://github.com/mlfoundations/open_clip/tree/main).
   
 - **Settings**
   - `reset_each_shift` Reset the model state after the adaptation to a domain.
@@ -88,17 +87,19 @@ This repository allows to study a wide range of different datasets, models, sett
   - Combinations like `gradual_correlated` or `reset_each_shift_correlated` are also possible.
 
 - **Methods**
-  - The repository currently supports the following methods: Source, BN-alpha, BN-1, [TENT](https://openreview.net/pdf?id=uXl3bZLkr3c),
+  - The repository currently supports the following methods: BN-0 (source), BN-alpha, BN-1, [TENT](https://openreview.net/pdf?id=uXl3bZLkr3c),
   [MEMO](https://openreview.net/pdf?id=vn74m_tWu8O), [ETA](https://arxiv.org/abs/2204.02610), [EATA](https://arxiv.org/abs/2204.02610),
   [CoTTA](https://arxiv.org/abs/2203.13591), [AdaContrast](https://arxiv.org/abs/2204.10377), [LAME](https://arxiv.org/abs/2201.05718), 
   [SAR](https://arxiv.org/abs/2302.12400), [RoTTA](https://arxiv.org/abs/2303.13899), [RPL](https://arxiv.org/abs/2104.12928),
-  [RDumb](https://arxiv.org/abs/2306.05401), [SANTA](https://openreview.net/forum?id=V7guVYzvE4), [DeYO](https://arxiv.org/abs/2403.07366), [CMF](https://openreview.net/forum?id=BllUWdpIOA)
+  [RDumb](https://arxiv.org/abs/2306.05401), [SANTA](https://openreview.net/pdf?id=V7guVYzvE4), [CMF](https://openreview.net/forum?id=BllUWdpIOA),
+  [DeYO](https://openreview.net/forum?id=9w3iw8wDuE),
   [GTTA](https://arxiv.org/abs/2208.07736), [RMT](https://arxiv.org/abs/2211.13081), and [ROID](https://arxiv.org/abs/2306.00650).
+  - While (all) aforementioned approaches can be used with [CLIP](https://arxiv.org/abs/2103.00020), we also support 
+  [TPT](https://arxiv.org/abs/2209.07511) and [VTE](...)
 
 - **Mixed Precision Training**
   - Almost all of the aforementioned methods (except SAR and GTTA) can be trained with mixed precision. This greatly 
-  speeds up your experiments and requires less memory. Note that all benchmark results are generated with fp32.
-
+  speeds up your experiments and requires less memory. However, all benchmark results are generated with fp32.
 
 - **Modular Design**
   - Adding new methods should be rather simple, thanks to the modular design.
@@ -119,19 +120,21 @@ To run one of the following benchmarks, the corresponding datasets need to be do
 - *DomainNet-126*: download the 6 splits of the [cleaned version](http://ai.bu.edu/M3SDA/). Following [MME](https://arxiv.org/abs/1904.06487), DomainNet-126 only uses a subset that contains 126 classes from 4 domains.
 - *ImageNet-to-CCC*: for non source-free methods, download [ImageNet](https://www.image-net.org/download.php). CCC is integrated as a webdataset and does not need to be downloaded! Please note that it cannot be combined with settings such as correlated.
 
-Next, specify the root folder for all datasets `_C.DATA_DIR = "./data"` in the file `conf.py`. For the individual datasets, the directory names are specified in `conf.py` as a dictionary (see function `complete_data_dir_path`). In case your directory names deviate from the ones specified in the mapping dictionary, you can simply modify them.
+After downloading the missing datasets, you may need to adapt the path to the root directory `_C.DATA_DIR = "./data"` 
+located in the file `conf.py`. For the individual datasets, the directory names are specified in `conf.py` as a dictionary (see function `complete_data_dir_path`). 
+In case your directory names deviate from the ones specified in the mapping dictionary, you can simply modify them.
 
 
 ### Run Experiments
 
 We provide config files for all experiments and methods. Simply run the following Python file with the corresponding config file.
 ```bash
-python test_time.py --cfg cfgs/[ccc/cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/deyo/cotta/rotta/adacontrast/lame/gtta/rmt/roid/cmf].yaml
+python test_time.py --cfg cfgs/[ccc/cifar10_c/cifar100_c/imagenet_c/imagenet_others/domainnet126]/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/cotta/rotta/adacontrast/lame/gtta/rmt/roid/tpt].yaml
 ```
 
-For imagenet_others, the argument CORRUPTION.DATASET has to be passed:
+For imagenet_others, the argument `CORRUPTION.DATASET` has to be passed:
 ```bash
-python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/deyo/cotta/rotta/adacontrast/lame/gtta/rmt/roid/cmf].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_v2/imagenet_d109]
+python test_time.py --cfg cfgs/imagenet_others/[source/norm_test/norm_alpha/tent/memo/rpl/eta/eata/rdumb/sar/cotta/rotta/adacontrast/lame/gtta/rmt/roid/tpt].yaml CORRUPTION.DATASET [imagenet_a/imagenet_r/imagenet_k/imagenet_v2/imagenet_d109]
 ```
 
 E.g., to run ROID for the ImageNet-to-ImageNet-R benchmark, run the following command.
@@ -152,14 +155,26 @@ For GTTA, we provide checkpoint files for the style transfer network. The checkp
 
 ### Changing Configurations
 Changing the evaluation configuration is extremely easy. For example, to run TENT on ImageNet-to-ImageNet-C in the `reset_each_shift` setting with a ResNet-50 and the `IMAGENET1K_V1` initialization, the arguments below have to be passed. 
-Further models and initializations can be found [here (torchvision)](https://pytorch.org/vision/0.14/models.html) or [here (timm)](https://github.com/huggingface/pytorch-image-models/tree/v0.6.13).
+Further models and initializations can be found [here (torchvision)](https://pytorch.org/vision/stable/models.html) or [here (timm)](https://github.com/huggingface/pytorch-image-models?tab=readme-ov-file).
 ```bash
 python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WEIGHTS IMAGENET1K_V1 SETTING reset_each_shift
+```
+
+For ImageNet-C, the default image list provided by robustbench considers 5000 samples per domain 
+(see [here](robustbench/data/imagenet_test_image_ids.txt)). If you are interested in running experiments on the full
+50,000 test samples, simply set `CORRUPTION.NUM_EX 50000`, i.e. 
+```bash
+python test_time.py --cfg cfgs/imagenet_c/roid.yaml CORRUPTION.NUM_EX 50000 
 ```
 
 ### Mixed Precision
 We support for most methods automatic mixed precision updates with loss scaling. By default mixed precision is set to false. To activate mixed precision set the argument `MIXED_PRECISION True`.
 
+
+### Benchmark
+We provide detailed results for each method using different models and settings [here](https://docs.google.com/spreadsheets/d/1xR-3df5xMMsEcMHe4Vo495E35RrIPs5abcR7Pztvucw/edit?usp=drive_link),
+The benchmark is updated regularly as new methods, datasets or settings are added to the repository.
+Further information on the settings or models can also be found in our [paper](https://arxiv.org/abs/2306.00650).
 
 ### Acknowledgements
 + Robustbench [official](https://github.com/RobustBench/robustbench)
@@ -172,7 +187,9 @@ We support for most methods automatic mixed precision updates with loss scaling.
 + RoTTA [official](https://github.com/BIT-DA/RoTTA)
 + SAR [official](https://github.com/mr-eggplant/SAR)
 + RDumb [official](https://github.com/oripress/CCC)
-+ DeYO [official](https://whitesnowdrop.github.io/DeYO/)
++ CMF [official](https://openreview.net/forum?id=BllUWdpIOA&noteId=FbQwbITFM0)
++ DeYO [official](https://github.com/Jhyun17/DeYO)
++ TPT [official](https://github.com/azshue/TPT)
 
 
 ## Segmentation

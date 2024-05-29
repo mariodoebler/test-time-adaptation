@@ -3,22 +3,24 @@
 This repository uses the models provided by [OpenCLIP](https://github.com/mlfoundations/open_clip).
 
 ## Unfold the full potential of this repository
-In addition to the datasets described [here](../README.md), 
+In addition to the datasets described [here](../../README.md), 
 we also support the following datasets, which are automatically downloaded via torchvision. 
 Please note that some of these datasets may fail to download automatically and will therefore require manual download.
 
-* [Caltech101](http://www.vision.caltech.edu/Image_Datasets/Caltech101/101_ObjectCategories.tar.gz)
-* [DTD](https://www.robots.ox.ac.uk/~vgg/data/dtd/download/dtd-r1.0.1.tar.gz)
-* [EuroSAT](http://madm.dfki.de/files/sentinel/EuroSAT.zip) (automatic download via torchvision fails)
-* [FGVCAircraft](https://www.robots.ox.ac.uk/~vgg/data/fgvc-aircraft/archives/fgvc-aircraft-2013b.tar.gz)
-* [Flowers102](https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowers.tgz)
-* [Food101](http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz)
-* [OxfordPets](https://www.robots.ox.ac.uk/~vgg/data/pets/data/images.tar.gz)
-* [StanfordCars](https://ai.stanford.edu/~jkrause/cars/car_dataset.html)    (automatic download via torchvision fails)
-* [SUN397](http://vision.princeton.edu/projects/2010/SUN/SUN397.tar.gz) (automatic download via torchvision fails)
-* [UCF101](https://drive.google.com/file/d/10Jqome3vtUA2keJkNanAiFpgbyC9Hc2O/view?usp=sharing) (automatic download via torchvision fails)
+- `caltech101` [Caltech101](http://www.vision.caltech.edu/Image_Datasets/Caltech101/101_ObjectCategories.tar.gz)
+- `dtd` [DTD](https://www.robots.ox.ac.uk/~vgg/data/dtd/download/dtd-r1.0.1.tar.gz)
+- `eurosat` [EuroSAT](http://madm.dfki.de/files/sentinel/EuroSAT.zip) (automatic download via torchvision fails)
+- `fgvc_aircraft` [FGVCAircraft](https://www.robots.ox.ac.uk/~vgg/data/fgvc-aircraft/archives/fgvc-aircraft-2013b.tar.gz)
+- `flowers102` [Flowers102](https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowers.tgz)
+- `food101` [Food101](http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz)
+- `oxford_pets` [OxfordPets](https://www.robots.ox.ac.uk/~vgg/data/pets/data/images.tar.gz)
+- `stanford_cars` [StanfordCars](https://ai.stanford.edu/~jkrause/cars/car_dataset.html)    (automatic download via torchvision fails)
+- `sun397` [SUN397](http://vision.princeton.edu/projects/2010/SUN/SUN397.tar.gz) (automatic download via torchvision fails)
+- `ucf101` [UCF101](https://drive.google.com/file/d/10Jqome3vtUA2keJkNanAiFpgbyC9Hc2O/view?usp=sharing) (automatic download via torchvision fails)
 
-After downloading the missing datasets, you may need to adapt the path to the root directory `_C.DATA_DIR = "./data"` 
+Since we adopt the same data splits as [CoOp](https://arxiv.org/abs/2109.01134), you can also refer to 
+[this page](https://github.com/KaiyangZhou/CoOp/blob/main/DATASETS.md#how-to-install-datasets) to setup the datasets.
+Note that we already downloaded the corresponding split files and put them under `datasets/other_lists`. After downloading the missing datasets, you may need to adapt the path to the root directory `_C.DATA_DIR = "./data"` 
 located in the file `conf.py`. For the individual datasets, the directory names are specified in `conf.py` as a dictionary
 within the function `complete_data_dir_path`. In case your directory names deviate from the ones specified in the mapping dictionary, you can simply change them. 
 
@@ -132,7 +134,7 @@ python test_time.py --cfg cfgs/imagenet_others/tpt.yaml MODEL.USE_CLIP True MODE
 ```
 This will result in an error rate of 23.0%
 
-Finally, in our [paper](...), we introduced Vision-Text-Space Ensemble (VTE), which creates an ensemble
+Finally, in our [paper](https://arxiv.org/abs/2405.14977), we introduced Vision-Text-Space Ensemble (VTE), which creates an ensemble
 in the image and text space. To run VTE, simply execute the following line of code
 ```bash
 python test_time.py --cfg cfgs/imagenet_others/vte.yaml MODEL.USE_CLIP True MODEL.ARCH ViT-B-16 MODEL.WEIGHTS openai
@@ -142,7 +144,7 @@ This will result in an error rate of 19.6% on ImageNet-R.
 
 ### Combining TTA methods for classification with CLIP
 
-This repository also supports the combination of the various settings, datasets, and methods described [here](../README.md) 
+This repository also supports the combination of the various settings, datasets, and methods described [here](../../README.md) 
 with image-text models like CLIP. For instance, you can test the performance of ROID on ImageNet-R with CLIP and 
 a `ViT-B-16` model pre-trained with weights from OpenAI, by running the following line of code
 ```bash

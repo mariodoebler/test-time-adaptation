@@ -53,9 +53,11 @@ conda activate tta
 <details open>
 <summary>Features</summary>
 
-This repository contains an extensive collection of different methods, datasets, models and settings,
+This repository contains an extensive collection of different methods, datasets, models, and settings,
 which we evaluate in a comprehensive benchmark (see below). We also provide a tutorial on how to use this 
-repository in combination with CLIP-like models [here](tutorials/tutorial_clip.md). A short overview is given below:
+repository in combination with CLIP-like models [here](classification/tutorials/tutorial_clip.md). 
+A brief overview of the repository's main features is provided below:
+
 
 - **Datasets**
   - `cifar10_c` [CIFAR10-C](https://zenodo.org/record/2535967#.ZBiI7NDMKUk)
@@ -142,19 +144,25 @@ E.g., to run ROID for the ImageNet-to-ImageNet-R benchmark, run the following co
 python test_time.py --cfg cfgs/imagenet_others/roid.yaml CORRUPTION.DATASET imagenet_r
 ```
 
-Alternatively, you can reproduce our experiments by running the `run.sh` in the subdirectory `classification/scripts`. For the different settings, modify `setting` within `run.sh`.
+Alternatively, you can reproduce our experiments by running the `run.sh` in the subdirectory `classification/scripts`.
+For the different settings, modify `setting` within `run.sh`.
 
-To run the different continual DomainNet-126 sequences, you have to pass the `MODEL.CKPT_PATH` argument. When not specifying a `CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
-The checkpoints are provided by [AdaContrast](https://github.com/DianCh/AdaContrast) and can be downloaded [here](https://drive.google.com/drive/folders/1OOSzrl6kzxIlEhNAK168dPXJcHwJ1A2X). Structurally, it is best to download them into the directory `./ckpt/domainnet126`.
+To run the different continual DomainNet-126 sequences, you have to pass the `MODEL.CKPT_PATH` argument. 
+When not specifying a `CKPT_PATH`, the sequence using the *real* domain as the source domain will be used.
+The checkpoints are provided by [AdaContrast](https://github.com/DianCh/AdaContrast) and can be downloaded [here](https://drive.google.com/drive/folders/1OOSzrl6kzxIlEhNAK168dPXJcHwJ1A2X). 
+Structurally, it is best to download them into the directory `./ckpt/domainnet126`.
 ```bash
 python test_time.py --cfg cfgs/domainnet126/rmt.yaml MODEL.CKPT_PATH ./ckpt/domainnet126/best_clipart_2020.pth
 ```
 
-For GTTA, we provide checkpoint files for the style transfer network. The checkpoints are provided on Google-Drive ([download](https://drive.google.com/file/d/1IpkUwyw8i9HEEjjD6pbbe_MCxM7yqKBq/view?usp=sharing)); extract the zip-file within the `classification` subdirectory.
+For GTTA, we provide checkpoint files for the style transfer network. The checkpoints are provided on 
+Google-Drive ([download](https://drive.google.com/file/d/1IpkUwyw8i9HEEjjD6pbbe_MCxM7yqKBq/view?usp=sharing)); 
+extract the zip-file within the `classification` subdirectory.
 
 
 ### Changing Configurations
-Changing the evaluation configuration is extremely easy. For example, to run TENT on ImageNet-to-ImageNet-C in the `reset_each_shift` setting with a ResNet-50 and the `IMAGENET1K_V1` initialization, the arguments below have to be passed. 
+Changing the evaluation configuration is extremely easy. For example, to run TENT on ImageNet-to-ImageNet-C 
+in the `reset_each_shift` setting with a ResNet-50 and the `IMAGENET1K_V1` initialization, the arguments below have to be passed. 
 Further models and initializations can be found [here (torchvision)](https://pytorch.org/vision/stable/models.html) or [here (timm)](https://github.com/huggingface/pytorch-image-models?tab=readme-ov-file).
 ```bash
 python test_time.py --cfg cfgs/imagenet_c/tent.yaml MODEL.ARCH resnet50 MODEL.WEIGHTS IMAGENET1K_V1 SETTING reset_each_shift
@@ -168,7 +176,8 @@ python test_time.py --cfg cfgs/imagenet_c/roid.yaml CORRUPTION.NUM_EX 50000
 ```
 
 ### Mixed Precision
-We support for most methods automatic mixed precision updates with loss scaling. By default mixed precision is set to false. To activate mixed precision set the argument `MIXED_PRECISION True`.
+We support for most methods automatic mixed precision updates with loss scaling. 
+By default mixed precision is set to false. To activate mixed precision set the argument `MIXED_PRECISION True`.
 
 
 ### Benchmark

@@ -37,6 +37,15 @@ This is an open source online test-time adaptation repository based on PyTorch. 
 }
 ```
 
+```
+@article{dobler2024lost,
+  title={A Lost Opportunity for Vision-Language Models: A Comparative Study of Online Test-time Adaptation for Vision-Language Models},
+  author={D{\"o}bler, Mario and Marsden, Robert A and Raichle, Tobias and Yang, Bin},
+  journal={arXiv preprint arXiv:2405.14977},
+  year={2024}
+}
+```
+
 </details>
 
 We encourage contributions! Pull requests to add methods are very welcome and appreciated.

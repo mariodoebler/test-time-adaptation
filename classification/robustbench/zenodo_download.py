@@ -80,5 +80,5 @@ def zenodo_download(record_id: str, filenames_to_download: Set[str],
         print("Download finished, extracting...")
         shutil.unpack_archive(filename,
                               extract_dir=save_dir,
-                              format=file["type"])
+                              format=file['key'].split('.')[-1])
         print("Downloaded and extracted.")

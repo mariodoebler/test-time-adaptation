@@ -224,8 +224,6 @@ def setup_gtta(model, device):
                       lambda_ce_trg=cfg.GTTA.LAMBDA_CE_TRG,
                       num_classes=cfg.MODEL.NUM_CLASSES,
                       ignore_label=cfg.OPTIM.IGNORE_LABEL,
-                      conf_thresh=cfg.GTTA.CONF_THRESH,
-                      class_weighting=cfg.GTTA.USE_CLASS_WEIGHTING,
                       style_transfer=cfg.GTTA.USE_STYLE_TRANSFER)
     return gtta_model
 

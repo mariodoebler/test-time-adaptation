@@ -1,19 +1,21 @@
 # Online Test-time Adaptation
 This is an open source online test-time adaptation repository based on PyTorch. It is joint work by Robert A. Marsden and Mario Döbler. It is also the official repository for the following works:
-- [Introducing Intermediate Domains for Effective Self-Training during Test-Time](https://arxiv.org/abs/2208.07736)
+- [Introducing Intermediate Domains for Effective Self-Training during Test-Time](https://arxiv.org/abs/2208.07736) (IJCNN2024)
 - [Robust Mean Teacher for Continual and Gradual Test-Time Adaptation](https://arxiv.org/abs/2211.13081) (CVPR2023)
 - [Universal Test-time Adaptation through Weight Ensembling, Diversity Weighting, and Prior Correction](https://arxiv.org/abs/2306.00650) (WACV2024)
-- [A Lost Opportunity for Vision-Language Models: A Comparative Study of Online Test-time Adaptation for Vision-Language Models](https://arxiv.org/abs/2405.14977) (CVPR2024 MAT Workshop Community Track)
+- [A Lost Opportunity for Vision-Language Models: A Comparative Study of Online Test-time Adaptation for Vision-Language Models](https://arxiv.org/abs/2405.14977) (ECCV2024 OOD Workshop)
 
 <details>
 <summary>Cite</summary>
 
 ```
-@article{marsden2022gradual,
-  title={Gradual test-time adaptation by self-training and style transfer},
+@inproceedings{marsden2024introducing,
+  title={Introducing intermediate domains for effective self-training during test-time},
   author={Marsden, Robert A and D{\"o}bler, Mario and Yang, Bin},
-  journal={arXiv preprint arXiv:2208.07736},
-  year={2022}
+  booktitle={2024 International Joint Conference on Neural Networks (IJCNN)},
+  pages={1--10},
+  year={2024},
+  organization={IEEE}
 }
 ```
 
@@ -38,11 +40,13 @@ This is an open source online test-time adaptation repository based on PyTorch. 
 ```
 
 ```
-@article{dobler2024lost,
-  title={A Lost Opportunity for Vision-Language Models: A Comparative Study of Online Test-time Adaptation for Vision-Language Models},
+@inproceedings{dobler2025lost,
+  title={A lost opportunity for vision-language models: a comparative study of online test-time adaptation for vision-language models},
   author={D{\"o}bler, Mario and Marsden, Robert A and Raichle, Tobias and Yang, Bin},
-  journal={arXiv preprint arXiv:2405.14977},
-  year={2024}
+  booktitle={European Conference on Computer Vision},
+  pages={117--133},
+  year={2025},
+  organization={Springer}
 }
 ```
 
